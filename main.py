@@ -3,7 +3,6 @@
 # from train import Trainer
 import sys
 sys.path.insert(0,"/home/lli/NeuralKG-ind-NeuralKG-ind/src/")
-print(0)
 
 
 
