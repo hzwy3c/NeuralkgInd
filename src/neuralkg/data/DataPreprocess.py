@@ -10,7 +10,7 @@ from scipy.sparse import csc_matrix
 from torch.utils.data import Dataset
 from collections import defaultdict as ddict
 from neuralkg.utils import deserialize
-from neuralkg.utils.tools import ssp_multigraph_to_dgl
+from neuralkg.utils.tools import ssp_multigraph_to_dgl, gen_subgraph_datasets
 
 class KGData(object):
     """Data preprocessing of kg data.
@@ -239,7 +239,11 @@ class GRData(Dataset):
         self.db_pos = self.main_env.open_db(db_name_pos.encode())
         self.db_neg = self.main_env.open_db(db_name_neg.encode())
 
-        ssp_graph, __, __, __, id2entity, id2relation = self.load_data_grail()
+        if db_name_pos == 'test_pos':
+            ssp_graph, __, __, relation2id, id2entity, id2relation = self.load_ind_data_grail()
+        else:
+            ssp_graph, __, __, relation2id, id2entity, id2relation = self.load_data_grail()
+        self.relation2id = relation2id
         
         if db_name_pos == 'train_pos':
             self.args.num_rel = len(ssp_graph)
@@ -332,6 +336,30 @@ class GRData(Dataset):
                                     shape=(len(train_ent2idx), len(train_ent2idx))))
 
         return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel 
+    
+    def load_ind_data_grail(self):
+        data = pickle.load(open(self.args.pk_path, 'rb'))
+
+        splits = ['train', 'test']
+
+        triplets = {}
+        for split_name in splits:
+            triplets[split_name] = np.array(data['ind_test_graph'][split_name])[:, [0, 2, 1]]
+
+        train_rel2idx = data['ind_test_graph']['rel2idx']
+        train_ent2idx = data['ind_test_graph']['ent2idx']
+        train_idx2rel = {i: r for r, i in train_rel2idx.items()}
+        train_idx2ent = {i: e for e, i in train_ent2idx.items()}
+
+        adj_list = []
+        for i in range(len(train_rel2idx)):
+            idx = np.argwhere(triplets['train'][:, 2] == i)
+            adj_list.append(csc_matrix((np.ones(len(idx), dtype=np.uint8),
+                                        (triplets['train'][:, 0][idx].squeeze(1), triplets['train'][:, 1][idx].squeeze(1))),
+                                    shape=(len(train_ent2idx), len(train_ent2idx))))
+
+        return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel 
+
 
     def generate_train(self):
         self.db_pos = self.main_env.open_db('train_pos'.encode())
@@ -656,6 +684,10 @@ class GraphSampler(object):
         self.train_triples = GRData(args, 'train_pos', 'train_neg')
         self.valid_triples = GRData(args, 'valid_pos', 'valid_neg')
         # self.test_triples = self.generate_ind_test()
+        if args.test_db_path is not None and not os.path.exists(args.test_db_path):
+            gen_subgraph_datasets(args, splits=['test'],
+                                   saved_relation2id=self.train_triples.relation2id,
+                                   max_label_value=self.train_triples.max_n_label)
         self.test_triples = GRData(args, 'test_pos', 'test_neg')
 
     def get_train(self):

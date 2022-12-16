@@ -4,7 +4,6 @@ import lmdb
 import time
 import yaml
 import json
-import tqdm
 import queue
 import torch
 import pickle
@@ -17,6 +16,7 @@ import numpy as np
 import networkx as nx
 import scipy.sparse as ssp
 import multiprocessing as mp
+from tqdm import tqdm
 from scipy.special import softmax
 from scipy.sparse import csc_matrix
 
@@ -181,10 +181,13 @@ def data2pkl(dataset_name):
 
     pickle.dump(save_data, open(f'./data/{dataset_name}.pkl', 'wb'))
 
-def gen_subgraph_datasets(args):
-    adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel = load_data_grail(args)
+def gen_subgraph_datasets(args, splits=['train', 'valid'], saved_relation2id=None, max_label_value=None):
+    testing = 'test' in splits
+    if testing:
+        adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel = load_ind_data_grail(args)
+    else:
+        adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel = load_data_grail(args)
 
-    splits = ['train', 'valid']
     graphs = {}
     for split_name in splits:
         graphs[split_name] = {'triplets': triplets[split_name], 'max_size': args.max_links}
@@ -194,7 +197,30 @@ def gen_subgraph_datasets(args):
         split['pos'], split['neg'] = sample_neg(adj_list, split['triplets'], args.num_neg_samples_per_link,
                                                 max_size=split['max_size'], constrained_neg_prob=args.constrained_neg_prob)
 
-    links2subgraphs(adj_list, graphs, args)
+    links2subgraphs(adj_list, graphs, args, max_label_value)
+
+def load_ind_data_grail(args):
+    data = pickle.load(open(args.pk_path, 'rb'))
+
+    splits = ['train', 'test']
+
+    triplets = {}
+    for split_name in splits:
+        triplets[split_name] = np.array(data['ind_test_graph'][split_name])[:, [0, 2, 1]]
+
+    train_rel2idx = data['ind_test_graph']['rel2idx']
+    train_ent2idx = data['ind_test_graph']['ent2idx']
+    train_idx2rel = {i: r for r, i in train_rel2idx.items()}
+    train_idx2ent = {i: e for e, i in train_ent2idx.items()}
+
+    adj_list = []
+    for i in range(len(train_rel2idx)):
+        idx = np.argwhere(triplets['train'][:, 2] == i)
+        adj_list.append(csc_matrix((np.ones(len(idx), dtype=np.uint8),
+                                    (triplets['train'][:, 0][idx].squeeze(1), triplets['train'][:, 1][idx].squeeze(1))),
+                                shape=(len(train_ent2idx), len(train_ent2idx))))
+
+    return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel 
 
 def load_data_grail(args):
     data = pickle.load(open(args.pk_path, 'rb'))
@@ -253,7 +279,6 @@ def sample_neg(adj_list, edges, num_neg_samples_per_link=1, max_size=1000000, co
     # possible head and tails for each relation
     valid_heads = [adj.tocoo().row.tolist() for adj in adj_list]
     valid_tails = [adj.tocoo().col.tolist() for adj in adj_list]
-
     pbar = tqdm(total=len(pos_edges))
     while len(neg_edges) < num_neg_samples_per_link * len(pos_edges):
         neg_head, neg_tail, rel = pos_edges[pbar.n % len(pos_edges)][0], pos_edges[pbar.n % len(pos_edges)][1], pos_edges[pbar.n % len(pos_edges)][2]
@@ -314,8 +339,11 @@ def links2subgraphs(A, graphs, params, max_label_value=None):
     for split_name, split in graphs.items():
         links_length += (len(split['pos']) + len(split['neg'])) * 2
     map_size = links_length * BYTES_PER_DATUM
-
-    env = lmdb.open(params.db_path, map_size=map_size, max_dbs=6)
+    
+    if params.test_db_path is not None:
+        env = lmdb.open(params.test_db_path, map_size=map_size, max_dbs=6)
+    else:
+        env = lmdb.open(params.db_path, map_size=map_size, max_dbs=6)
 
     def extraction_helper(A, links, g_labels, split_env):
 

@@ -21,17 +21,17 @@ def main():
         args = load_config(args, args.config_path)
     seed_everything(args.seed) 
     
-    if not os.path.exists(args.pk_path):
-        data2pkl(args.dataset_name)
+    # import pdb;pdb.set_trace()
 
-    if not os.path.exists(args.db_path):
-        if args.directed == False:
-            gen_subgraph_datasets(args) # [头， 尾， 关系]
-        else:
-            gen_subgraph_datasets_directed(args)
-    
-    #test_auc
-    
+    # if not os.path.exists(args.pk_path):
+    #     data2pkl(args.dataset_name)
+
+    # if not os.path.exists(args.db_path):
+    #     if args.directed == False:
+    #         gen_subgraph_datasets(args) # [头， 尾， 关系]
+    #     else:
+    #         gen_subgraph_datasets_directed(args)
+        
     
     if args.init_checkpoint:
         override_config(args) #TODO: 设置checkpoint自动载入
@@ -52,6 +52,7 @@ def main():
     logging.info("++++++++++++++++++++++++++++++++over loading+++++++++++++++++++++++++++++++")
 
     """set up sampler to datapreprocess""" #设置数据处理的采样过程
+    
     train_sampler_class = import_class(f"neuralkg.data.{args.train_sampler_class}")
     train_sampler = train_sampler_class(args)  # 这个sampler是可选择的
     
@@ -159,6 +160,7 @@ def main():
         save_config(args)
     if args.use_wandb:
         logger.watch(lit_model)
+    
     if not args.test_only:
         # train&valid
         trainer.fit(lit_model, datamodule=kgdata)
@@ -166,6 +168,7 @@ def main():
         path = model_checkpoint.best_model_path
     else:
         path = args.checkpoint_dir
+    
     lit_model.load_state_dict(torch.load(path)["state_dict"])
     lit_model.eval()
     trainer.test(lit_model, datamodule=kgdata)

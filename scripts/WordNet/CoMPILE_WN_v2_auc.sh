@@ -1,13 +1,14 @@
 DATA_DIR=dataset
 
 MODEL_NAME=CoMPILE
-DATASET_NAME=WN18RR_v4
+DATASET_NAME=WN18RR_v2
 DATA_PATH=$DATA_DIR/$DATASET_NAME
-DB_PATH=$DATA_DIR/WN18RR_v4_subgraph
-PK_PATH=$DATA_DIR/WN18RR_v4.pkl
+DB_PATH=$DATA_DIR/WN18RR_v2_subgraph
+TEST_DB_PATH=$DATA_DIR/WN18RR_v2_ind/test_subgraphs
+PK_PATH=$DATA_DIR/WN18RR_v2.pkl
 TRAIN_SAMPLER_CLASS=DglSampler2
 VALID_SAMPLER_CLASS=ValidDglSampler2
-TEST_SAMPLER_CLASS=TestDglSampler2
+TEST_SAMPLER_CLASS=NewDglSampler2
 LITMODEL_NAME=indGNNLitModel
 LOSS=Margin_Loss
 MAX_EPOCHS=100
@@ -36,6 +37,7 @@ CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --test_sampler_class $TEST_SAMPLER_CLASS \
     --litmodel_name $LITMODEL_NAME \
     --loss $LOSS \
+    --test_db_path $TEST_DB_PATH \
     --max_epochs $MAX_EPOCHS \
     --emb_dim $EMB_DIM \
     --train_bs $TRAIN_BS \
@@ -50,4 +52,5 @@ CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --dropout $DROPOUT \
     --calc_hits $CALC_HITS \
     --test_only
+    
 

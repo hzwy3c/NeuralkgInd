@@ -44,7 +44,7 @@ def setup_parser():
     parser.add_argument('--gpu', default='cuda:0', type=str, help='Select the GPU in training, default cuda:0.')
     parser.add_argument("--use_wandb", default=False, action='store_true',help='Use "weight and bias" to record the result.')
     parser.add_argument('--use_weight', default=False, action='store_true', help='Use subsampling weight.')
-    parser.add_argument('--checkpoint_dir', default="", type=str, help='The checkpoint model path')
+    parser.add_argument('--checkpoint_dir', default="/home/lli/NeuralKG-ind-NeuralKG-ind/output/link_prediction/WN18RR_v3/CoMPILE/epoch=5-Eval|aoc=0.966.ckpt", type=str, help='The checkpoint model path')
     parser.add_argument('--save_config', default=False, action='store_true', help='Save paramters config file.')
     parser.add_argument('--load_config', default=False, action='store_true', help='Load parametes config file.')
     parser.add_argument('--config_path', default="", type=str, help='The config file path.')
