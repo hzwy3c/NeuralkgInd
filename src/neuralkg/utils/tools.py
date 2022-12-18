@@ -140,17 +140,17 @@ def reidx_withr(tri, rel_reidx):
 
 def data2pkl(dataset_name):
     train_tri = []
-    file = open('./data/{}/train.txt'.format(dataset_name))
+    file = open('./dataset/{}/train.txt'.format(dataset_name))
     train_tri.extend([l.strip().split() for l in file.readlines()])
     file.close()
 
     valid_tri = []
-    file = open('./data/{}/valid.txt'.format(dataset_name))
+    file = open('./dataset/{}/valid.txt'.format(dataset_name))
     valid_tri.extend([l.strip().split() for l in file.readlines()])
     file.close()
 
     test_tri = []
-    file = open('./data/{}/test.txt'.format(dataset_name))
+    file = open('./dataset/{}/test.txt'.format(dataset_name))
     test_tri.extend([l.strip().split() for l in file.readlines()])
     file.close()
 
@@ -158,15 +158,15 @@ def data2pkl(dataset_name):
     valid_tri = reidx_withr_ande(valid_tri, fix_rel_reidx, ent_reidx)
     test_tri = reidx_withr_ande(test_tri, fix_rel_reidx, ent_reidx)
 
-    file = open('./data/{}_ind/train.txt'.format(dataset_name))
+    file = open('./dataset/{}_ind/train.txt'.format(dataset_name))
     ind_train_tri = ([l.strip().split() for l in file.readlines()])
     file.close()
 
-    file = open('./data/{}_ind/valid.txt'.format(dataset_name))
+    file = open('./dataset/{}_ind/valid.txt'.format(dataset_name))
     ind_valid_tri = ([l.strip().split() for l in file.readlines()])
     file.close()
 
-    file = open('./data/{}_ind/test.txt'.format(dataset_name))
+    file = open('./dataset/{}_ind/test.txt'.format(dataset_name))
     ind_test_tri = ([l.strip().split() for l in file.readlines()])
     file.close()
 
@@ -179,14 +179,14 @@ def data2pkl(dataset_name):
                  'ind_test_graph': {'train': test_train_tri, 'valid': test_valid_tri, 'test': test_test_tri,
                                     'rel2idx': fix_rel_reidx, 'ent2idx': ent_reidx_ind}}
 
-    pickle.dump(save_data, open(f'./data/{dataset_name}.pkl', 'wb'))
+    pickle.dump(save_data, open(f'./dataset/{dataset_name}.pkl', 'wb'))
 
 def gen_subgraph_datasets(args, splits=['train', 'valid'], saved_relation2id=None, max_label_value=None):
     testing = 'test' in splits
     if testing:
         adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel = load_ind_data_grail(args)
     else:
-        adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel = load_data_grail(args)
+        adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel, _, _, _, _ = load_data_grail(args)
 
     graphs = {}
     for split_name in splits:
@@ -197,7 +197,7 @@ def gen_subgraph_datasets(args, splits=['train', 'valid'], saved_relation2id=Non
         split['pos'], split['neg'] = sample_neg(adj_list, split['triplets'], args.num_neg_samples_per_link,
                                                 max_size=split['max_size'], constrained_neg_prob=args.constrained_neg_prob)
 
-    links2subgraphs(adj_list, graphs, args, max_label_value)
+    links2subgraphs(adj_list, graphs, args, max_label_value, testing)
 
 def load_ind_data_grail(args):
     data = pickle.load(open(args.pk_path, 'rb'))
@@ -222,7 +222,7 @@ def load_ind_data_grail(args):
 
     return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel 
 
-def load_data_grail(args):
+def load_data_grail(args, add_traspose_rels=False):
     data = pickle.load(open(args.pk_path, 'rb'))
 
     splits = ['train', 'valid']
@@ -235,6 +235,70 @@ def load_data_grail(args):
     train_ent2idx = data['train_graph']['ent2idx']
     train_idx2rel = {i: r for r, i in train_rel2idx.items()}
     train_idx2ent = {i: e for e, i in train_ent2idx.items()}
+    
+    h2r = {}
+    t2r = {}
+    m_h2r = {}
+    m_t2r = {}
+    if args.model_name == 'SNRI':
+        # Construct the the neighbor relations of each entity
+        num_rels = len(train_idx2rel)
+        num_ents = len(train_idx2ent)
+        h2r = {}
+        h2r_len = {}
+        t2r = {}
+        t2r_len = {}
+        
+        for triplet in triplets['train']:
+            h, t, r = triplet
+            if h not in h2r:
+                h2r_len[h] = 1
+                h2r[h] = [r]
+            else:
+                h2r_len[h] += 1
+                h2r[h].append(r)
+            
+            if args.add_traspose_rels:
+                # Consider the reverse relation, the id of reverse relation is (relation + #relations)
+                if t not in t2r:
+                    t2r[t] = [r + num_rels]
+                else:
+                    t2r[t].append(r + num_rels)
+            if t not in t2r:
+                t2r[t] = [r]
+                t2r_len[t]  = 1
+            else:
+                t2r[t].append(r)
+                t2r_len[t] += 1
+
+        # Construct the matrix of ent2rels
+        h_nei_rels_len = int(np.percentile(list(h2r_len.values()), 75))
+        t_nei_rels_len = int(np.percentile(list(t2r_len.values()), 75))
+        logging.info("Average number of relations each node: ", "head: ", h_nei_rels_len, 'tail: ', t_nei_rels_len)
+        
+        # The index "num_rels" of relation is considered as "padding" relation.
+        # Use padding relation to initialize matrix of ent2rels.
+        m_h2r = np.ones([num_ents, h_nei_rels_len]) * num_rels
+        for ent, rels in h2r.items():
+            if len(rels) > h_nei_rels_len:
+                rels = np.array(rels)[np.random.choice(np.arange(len(rels)), h_nei_rels_len)]
+                m_h2r[ent] = rels
+            else:
+                rels = np.array(rels)
+                m_h2r[ent][: rels.shape[0]] = rels      
+        
+        m_t2r = np.ones([num_ents, t_nei_rels_len]) * num_rels
+        for ent, rels in t2r.items():
+            if len(rels) > t_nei_rels_len:
+                rels = np.array(rels)[np.random.choice(np.arange(len(rels)), t_nei_rels_len)]
+                m_t2r[ent] = rels
+            else:
+                rels = np.array(rels)
+                m_t2r[ent][: rels.shape[0]] = rels
+
+        # Sort the data according to relation id 
+        if args.sort_data:
+            triplets['train'] = triplets['train'][np.argsort(triplets['train'][:,2])]
 
     adj_list = []
     for i in range(len(train_rel2idx)):
@@ -243,7 +307,7 @@ def load_data_grail(args):
                                     (triplets['train'][:, 0][idx].squeeze(1), triplets['train'][:, 1][idx].squeeze(1))),
                                 shape=(len(train_ent2idx), len(train_ent2idx))))
 
-    return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel
+    return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel, h2r, m_h2r, t2r, m_t2r
 
 def get_average_subgraph_size(sample_size, links, A, params):
     total_size = 0
@@ -325,7 +389,7 @@ def extract_save_subgraph(args_):
 
     return (str_id, datum)
 
-def links2subgraphs(A, graphs, params, max_label_value=None):
+def links2subgraphs(A, graphs, params, max_label_value=None, testing=False):
     '''
     extract enclosing subgraphs, write map mode + named dbs
     '''
@@ -340,7 +404,7 @@ def links2subgraphs(A, graphs, params, max_label_value=None):
         links_length += (len(split['pos']) + len(split['neg'])) * 2
     map_size = links_length * BYTES_PER_DATUM
     
-    if params.test_db_path is not None:
+    if testing:
         env = lmdb.open(params.test_db_path, map_size=map_size, max_dbs=6)
     else:
         env = lmdb.open(params.db_path, map_size=map_size, max_dbs=6)

@@ -242,7 +242,7 @@ class GRData(Dataset):
         if db_name_pos == 'test_pos':
             ssp_graph, __, __, relation2id, id2entity, id2relation = self.load_ind_data_grail()
         else:
-            ssp_graph, __, __, relation2id, id2entity, id2relation = self.load_data_grail()
+            ssp_graph, __, __, relation2id, id2entity, id2relation, _, m_h2r, _, m_t2r = self.load_data_grail()
         self.relation2id = relation2id
         
         if db_name_pos == 'train_pos':
@@ -261,6 +261,9 @@ class GRData(Dataset):
         self.ssp_graph = ssp_graph
         self.id2entity = id2entity
         self.id2relation = id2relation
+        if self.args.model_name == 'SNRI':
+            self.m_h2r = m_h2r
+            self.m_t2r = m_t2r
 
         self.max_n_label = np.array([0, 0])
         with self.main_env.begin() as txn:
@@ -328,6 +331,68 @@ class GRData(Dataset):
         train_idx2rel = {i: r for r, i in train_rel2idx.items()}
         train_idx2ent = {i: e for e, i in train_ent2idx.items()}
 
+        h2r = {}
+        t2r = {}
+        m_h2r = {}
+        m_t2r = {}
+        if self.args.model_name == 'SNRI':
+            # Construct the the neighbor relations of each entity
+            num_rels = len(train_idx2rel)
+            num_ents = len(train_idx2ent)
+            h2r_len = {}
+            t2r_len = {}
+            
+            for triplet in triplets['train']:
+                h, t, r = triplet
+                if h not in h2r:
+                    h2r_len[h] = 1
+                    h2r[h] = [r]
+                else:
+                    h2r_len[h] += 1
+                    h2r[h].append(r)
+                
+                if self.args.add_traspose_rels:
+                    # Consider the reverse relation, the id of reverse relation is (relation + #relations)
+                    if t not in t2r:
+                        t2r[t] = [r + num_rels]
+                    else:
+                        t2r[t].append(r + num_rels)
+                if t not in t2r:
+                    t2r[t] = [r]
+                    t2r_len[t]  = 1
+                else:
+                    t2r[t].append(r)
+                    t2r_len[t] += 1
+
+            # Construct the matrix of ent2rels
+            h_nei_rels_len = int(np.percentile(list(h2r_len.values()), 75))
+            t_nei_rels_len = int(np.percentile(list(t2r_len.values()), 75))
+            logging.info("Average number of relations each node: ", "head: ", h_nei_rels_len, 'tail: ', t_nei_rels_len)
+            
+            # The index "num_rels" of relation is considered as "padding" relation.
+            # Use padding relation to initialize matrix of ent2rels.
+            m_h2r = np.ones([num_ents, h_nei_rels_len]) * num_rels
+            for ent, rels in h2r.items():
+                if len(rels) > h_nei_rels_len:
+                    rels = np.array(rels)[np.random.choice(np.arange(len(rels)), h_nei_rels_len)]
+                    m_h2r[ent] = rels
+                else:
+                    rels = np.array(rels)
+                    m_h2r[ent][: rels.shape[0]] = rels      
+            
+            m_t2r = np.ones([num_ents, t_nei_rels_len]) * num_rels
+            for ent, rels in t2r.items():
+                if len(rels) > t_nei_rels_len:
+                    rels = np.array(rels)[np.random.choice(np.arange(len(rels)), t_nei_rels_len)]
+                    m_t2r[ent] = rels
+                else:
+                    rels = np.array(rels)
+                    m_t2r[ent][: rels.shape[0]] = rels
+
+            # Sort the data according to relation id 
+            if self.args.sort_data:
+                triplets['train'] = triplets['train'][np.argsort(triplets['train'][:,2])]
+        
         adj_list = []
         for i in range(len(train_rel2idx)):
             idx = np.argwhere(triplets['train'][:, 2] == i)
@@ -335,7 +400,7 @@ class GRData(Dataset):
                                         (triplets['train'][:, 0][idx].squeeze(1), triplets['train'][:, 1][idx].squeeze(1))),
                                     shape=(len(train_ent2idx), len(train_ent2idx))))
 
-        return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel 
+        return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel, h2r, m_h2r, t2r, m_t2r
     
     def load_ind_data_grail(self):
         data = pickle.load(open(self.args.pk_path, 'rb'))
@@ -398,11 +463,18 @@ class GRData(Dataset):
                                      {'type': torch.LongTensor([r_label]),
                                       'label': torch.LongTensor([r_label])})
 
-        subgraph = self.prepare_features_new(subgraph, n_labels)
+        if  self.args.model_name == 'SNRI':
+            self._prepare_features_new(subgraph, n_labels, r_label)
+        else:
+            subgraph = self.prepare_features_new(subgraph, n_labels)
+        if self.args.model_name == 'SNRI':
+            subgraph.ndata['parent_id'] = self.graph.subgraph(nodes).parent_nid
+            subgraph.ndata['out_nei_rels'] = torch.LongTensor(self.m_h2r[subgraph.ndata['parent_id']])
+            subgraph.ndata['in_nei_rels'] = torch.LongTensor(self.m_t2r[subgraph.ndata['parent_id']])
 
         return subgraph
 
-    def prepare_features_new(self, subgraph, n_labels):
+    def prepare_features_new(self, subgraph, n_labels, r_label=None):
         n_nodes = subgraph.number_of_nodes()
         label_feats = np.zeros((n_nodes, self.max_n_label[0] + 1 + self.max_n_label[1] + 1))
         label_feats[np.arange(n_nodes), n_labels[:, 0]] = 1
@@ -417,7 +489,8 @@ class GRData(Dataset):
         n_ids[head_id] = 1  # head
         n_ids[tail_id] = 2  # tail
         subgraph.ndata['id'] = torch.FloatTensor(n_ids)
-
+        if self.args.model_name == 'SNRI':
+            subgraph.ndata['r_label'] = torch.LongTensor(np.ones(n_nodes) * r_label)
         self.n_feat_dim = n_feats.shape[1]  # Find cleaner way to do this -- i.e. set the n_feat_dim
         return subgraph
 
@@ -683,6 +756,9 @@ class GraphSampler(object):
         self.args = args
         self.train_triples = GRData(args, 'train_pos', 'train_neg')
         self.valid_triples = GRData(args, 'valid_pos', 'valid_neg')
+        if self.args.model_name == 'SNRI':
+            self.valid_triples.m_h2r = self.train_triples.m_h2r
+            self.valid_triples.m_t2r = self.train_triples.m_t2r
         # self.test_triples = self.generate_ind_test()
         if args.test_db_path is not None and not os.path.exists(args.test_db_path):
             gen_subgraph_datasets(args, splits=['test'],
@@ -729,7 +805,12 @@ class GraphSampler(object):
                                         (triplets['train'][:, 0][idx].squeeze(1), triplets['train'][:, 1][idx].squeeze(1))),
                                     shape=(len(ent2idx), len(ent2idx))))
 
-        dgl_adj_list = ssp_multigraph_to_dgl(adj_list)
+        adj_list_aug = adj_list
+        if self.args.add_traspose_rels:
+            adj_list_t = [adj.T for adj in adj_list]
+            adj_list_aug = adj_list + adj_list_t
+        
+        dgl_adj_list = ssp_multigraph_to_dgl(adj_list_aug)
 
         return adj_list, dgl_adj_list, triplets, ent2idx, rel2idx, idx2ent, idx2rel
 

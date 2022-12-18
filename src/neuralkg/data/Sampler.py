@@ -65,6 +65,36 @@ class DglSampler2(GraphSampler):
     def get_sampling_keys(self):
         return ['positive_sample', 'negative_sample', 'positive_label', 'negative_label']
 
+class SNRISampler(GraphSampler):
+
+    def __init__(self, args):
+        super().__init__(args)
+
+    def sampling(self, data):
+        batch_data = {}
+
+        graphs_pos, g_labels_pos, r_labels_pos, graphs_negs, g_labels_negs, r_labels_negs = map(list, zip(*data))
+        batched_graph_pos = dgl.batch(graphs_pos)
+        batched_graph_cor = dgl.batch(graphs_pos)
+
+        graphs_neg = [item for sublist in graphs_negs for item in sublist]
+        r_labels_neg = [item for sublist in r_labels_negs for item in sublist]
+
+        batched_graph_neg = dgl.batch(graphs_neg)
+        
+        r_labels_pos = torch.LongTensor(r_labels_pos)
+        r_labels_neg = torch.LongTensor(r_labels_neg)
+
+        batch_data["positive_sample"] = batched_graph_pos
+        batch_data["positive_cor"] = batched_graph_cor
+        batch_data["negative_sample"] = batched_graph_neg
+        batch_data["positive_label"] =  r_labels_pos
+        batch_data["negative_label"] =  r_labels_neg
+        return batch_data
+
+    def get_sampling_keys(self):
+        return ['positive_sample', 'positive_cor', 'negative_sample', 'positive_label', 'negative_label']
+
 class UniSampler(BaseSampler):
     """Random negative sampling 
     Filtering out positive samples and selecting some samples randomly as negative samples.

@@ -23,15 +23,12 @@ def main():
     
     # import pdb;pdb.set_trace()
 
-    # if not os.path.exists(args.pk_path):
-    #     data2pkl(args.dataset_name)
+    if not os.path.exists(args.pk_path):
+        data2pkl(args.dataset_name)
 
-    # if not os.path.exists(args.db_path):
-    #     if args.directed == False:
-    #         gen_subgraph_datasets(args) # [头， 尾， 关系]
-    #     else:
-    #         gen_subgraph_datasets_directed(args)
-        
+    if not os.path.exists(args.db_path):
+        gen_subgraph_datasets(args) # [头， 尾， 关系]
+    
     
     if args.init_checkpoint:
         override_config(args) #TODO: 设置checkpoint自动载入
