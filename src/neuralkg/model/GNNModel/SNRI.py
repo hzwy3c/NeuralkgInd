@@ -15,7 +15,7 @@ class SNRI(nn.Module):
         self.gnn = RGCN(params)  # in_dim, h_dim, h_dim, num_rels, num_bases)
 
         # num_rels + 1 instead of nums_rels, in order to add a "padding" relation.
-        self.rel_emb = nn.Embedding(self.params.num_rels + 1, self.params.inp_dim, sparse=False, padding_idx=self.params.num_rels)
+        self.rel_emb = nn.Embedding(self.params.num_rel + 1, self.params.inp_dim, sparse=False, padding_idx=self.params.num_rel)
         
         self.ent_padding = nn.Parameter(torch.FloatTensor(1, self.params.sem_dim).uniform_(-1, 1))
         if self.params.init_nei_rels == 'both':
@@ -171,7 +171,7 @@ class SNRI(nn.Module):
         # GRU layer for nodes
         graph_sizes = g.batch_num_nodes
         out_dim = self.params.num_gcn_layers * self.params.emb_dim
-        g.ndata['repr'] = F.relu(self.batch_gru(g.ndata['repr'].view(-1, out_dim), graph_sizes))
+        g.ndata['repr'] = F.relu(self.batch_gru(g.ndata['repr'].view(-1, out_dim), graph_sizes()))
         node_hiddens = F.relu(self.W_o(g.ndata['repr']))  # num_nodes x hidden 
         g.ndata['repr'] = self.dropout(node_hiddens)  # num_nodes x hidden
         g_out = mean_nodes(g, 'repr').view(-1, out_dim)
@@ -219,11 +219,11 @@ class RGCN(nn.Module):
     def __init__(self, params):
         super(RGCN, self).__init__()
 
-        self.max_label_value = params.max_label_value
+        # self.max_label_value = params.max_label_value
         self.inp_dim = params.inp_dim
         self.emb_dim = params.emb_dim
         self.attn_rel_emb_dim = params.attn_rel_emb_dim
-        self.num_rels = params.num_rels
+        self.num_rels = params.num_rel
         self.aug_num_rels = params.aug_num_rels
         self.num_bases = params.num_bases
         self.num_hidden_layers = params.num_gcn_layers
@@ -234,7 +234,7 @@ class RGCN(nn.Module):
         
         self.is_comp = params.is_comp
 
-        self.device = params.device
+        # self.device = params.device
 
         if self.has_attn:
             self.attn_rel_emb = nn.Embedding(self.num_rels, self.attn_rel_emb_dim, sparse=False)
@@ -260,7 +260,8 @@ class RGCN(nn.Module):
         self.features = self.create_features()
 
     def create_features(self):
-        features = torch.arange(self.inp_dim).to(device=self.device)
+        # features = torch.arange(self.inp_dim).to(device=self.device)
+        features = torch.arange(self.inp_dim)
         return features
 
     def build_model(self):
@@ -275,7 +276,7 @@ class RGCN(nn.Module):
             self.layers.append(h2h)
 
     def build_input_layer(self):
-        return RGCNLayer(self.inp_dim,
+        return RGCNBasisLayer(self.inp_dim,
                          self.emb_dim,
                          # self.input_basis_weights,
                          self.aggregator,
@@ -290,7 +291,7 @@ class RGCN(nn.Module):
                          is_comp=self.is_comp)
 
     def build_hidden_layer(self, idx):
-        return RGCNLayer(self.emb_dim,
+        return RGCNBasisLayer(self.emb_dim,
                          self.emb_dim,
                          # self.basis_weights,
                          self.aggregator,

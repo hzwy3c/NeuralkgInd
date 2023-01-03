@@ -3,7 +3,7 @@ import os
 from IPython import embed
 import numpy as np
 
-def link_predict(batch, model, prediction="all"):
+def link_predict(batch, model, prediction="all", model_name=None):
     """The evaluate task is predicting the head entity or tail entity in incomplete triples.
         
     Args:
@@ -23,13 +23,16 @@ def link_predict(batch, model, prediction="all"):
     elif prediction == "tail":
         ranks = tail_predict(batch, model)
     elif prediction == "ind":
-        ranks = ind_predict(batch, model)
+        ranks = ind_predict(batch, model, model_name)
 
     return ranks.float()
 
-def ind_predict(batch, model):
+def ind_predict(batch, model, model_name=None):
     head_triple = batch["head_sample"]
-    head_scores = model(head_triple[0]).squeeze(1).detach().cpu().numpy()
+    if model_name == 'CoMPILE':
+        head_scores = model(head_triple[0]).squeeze(1).detach().cpu().numpy()
+    else:
+        head_scores = model(head_triple).squeeze(1).detach().cpu().numpy()
     head_target = batch["head_target"]
     if head_target != 10000:  
         head_rank = np.argwhere(np.argsort(head_scores)[::-1] == head_target) + 1
@@ -38,7 +41,10 @@ def ind_predict(batch, model):
         head_rank = torch.tensor([10000])
 
     tail_triple = batch["tail_sample"]
-    tail_scores = model(tail_triple[0]).squeeze(1).detach().cpu().numpy()
+    if model_name == 'CoMPILE':
+        tail_scores = model(tail_triple[0]).squeeze(1).detach().cpu().numpy()
+    else:
+        tail_scores = model(tail_triple).squeeze(1).detach().cpu().numpy()
     tail_target = batch["tail_target"]
     if tail_target != 10000:
         tail_rank = np.argwhere(np.argsort(tail_scores)[::-1] == tail_target) + 1

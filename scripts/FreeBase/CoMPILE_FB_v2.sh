@@ -1,14 +1,14 @@
 DATA_DIR=dataset
-
+OUT=output
 MODEL_NAME=CoMPILE
-DATASET_NAME=WN18RR_v4
+DATASET_NAME=fb237_v2
 DATA_PATH=$DATA_DIR/$DATASET_NAME
-DB_PATH=$DATA_DIR/WN18RR_v4_subgraph
-TEST_DB_PATH=$DATA_DIR/WN18RR_v4_ind/test_subgraphs
-PK_PATH=$DATA_DIR/WN18RR_v4.pkl
+DB_PATH=$DATA_DIR/fb237_v2_subgraph
+TEST_DB_PATH=$DATA_DIR/fb237_v2_ind/test_subgraphs
+PK_PATH=$DATA_DIR/fb237_v2.pkl
 TRAIN_SAMPLER_CLASS=DglSampler2
 VALID_SAMPLER_CLASS=ValidDglSampler2
-TEST_SAMPLER_CLASS=NewDglSampler2
+TEST_SAMPLER_CLASS=TestDglSampler2
 LITMODEL_NAME=indGNNLitModel
 LOSS=Margin_Loss
 MAX_EPOCHS=30
@@ -25,7 +25,7 @@ NUM_WORKERS=20
 DROPOUT=0
 CALC_HITS=1,5,10
 GPU=1
-CHECKPOINT_DIR=output/link_prediction/WN18RR_v4/CoMPILE/epoch\=6-Eval\|aoc\=0.983.ckpt
+CHECKPOINT_DIR=output/link_prediction/fb237_v2/CoMPILE/epoch\=25-Eval\|aoc\=0.909.ckpt
 
 CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --model_name $MODEL_NAME \
@@ -49,8 +49,8 @@ CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --lr $LR \
     --check_per_epoch $CHECK_PER_EPOCH \
     --early_stop_patience $EARLY_STOP_PATIENCE \
+    --checkpoint_dir $CHECKPOINT_DIR \
     --num_workers $NUM_WORKERS \
     --dropout $DROPOUT \
     --calc_hits $CALC_HITS \
-    --checkpoint_dir $CHECKPOINT_DIR \
-    --test_only
+    --test_only 

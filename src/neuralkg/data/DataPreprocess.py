@@ -367,7 +367,6 @@ class GRData(Dataset):
             # Construct the matrix of ent2rels
             h_nei_rels_len = int(np.percentile(list(h2r_len.values()), 75))
             t_nei_rels_len = int(np.percentile(list(t2r_len.values()), 75))
-            logging.info("Average number of relations each node: ", "head: ", h_nei_rels_len, 'tail: ', t_nei_rels_len)
             
             # The index "num_rels" of relation is considered as "padding" relation.
             # Use padding relation to initialize matrix of ent2rels.
@@ -464,13 +463,13 @@ class GRData(Dataset):
                                       'label': torch.LongTensor([r_label])})
 
         if  self.args.model_name == 'SNRI':
-            self._prepare_features_new(subgraph, n_labels, r_label)
+            self.prepare_features_new(subgraph, n_labels, r_label)
         else:
             subgraph = self.prepare_features_new(subgraph, n_labels)
         if self.args.model_name == 'SNRI':
-            subgraph.ndata['parent_id'] = self.graph.subgraph(nodes).parent_nid
-            subgraph.ndata['out_nei_rels'] = torch.LongTensor(self.m_h2r[subgraph.ndata['parent_id']])
-            subgraph.ndata['in_nei_rels'] = torch.LongTensor(self.m_t2r[subgraph.ndata['parent_id']])
+            # subgraph.ndata['parent_id'] = self.graph.subgraph(nodes).parent_nid
+            subgraph.ndata['out_nei_rels'] = torch.LongTensor(self.m_h2r[subgraph.ndata[dgl.NID]])
+            subgraph.ndata['in_nei_rels'] = torch.LongTensor(self.m_t2r[subgraph.ndata[dgl.NID]])
 
         return subgraph
 
@@ -756,15 +755,20 @@ class GraphSampler(object):
         self.args = args
         self.train_triples = GRData(args, 'train_pos', 'train_neg')
         self.valid_triples = GRData(args, 'valid_pos', 'valid_neg')
+        self.n_feat_dim = self.train_triples.n_feat_dim
         if self.args.model_name == 'SNRI':
+            if args.init_nei_rels == 'no':
+                args.inp_dim = self.n_feat_dim
+            else:
+                args.inp_dim = self.n_feat_dim + args.sem_dim
             self.valid_triples.m_h2r = self.train_triples.m_h2r
             self.valid_triples.m_t2r = self.train_triples.m_t2r
-        # self.test_triples = self.generate_ind_test()
-        if args.test_db_path is not None and not os.path.exists(args.test_db_path):
-            gen_subgraph_datasets(args, splits=['test'],
-                                   saved_relation2id=self.train_triples.relation2id,
-                                   max_label_value=self.train_triples.max_n_label)
-        self.test_triples = GRData(args, 'test_pos', 'test_neg')
+        self.test_triples = self.generate_ind_test()
+        # if args.test_db_path is not None and not os.path.exists(args.test_db_path):
+        #     gen_subgraph_datasets(args, splits=['test'],
+        #                            saved_relation2id=self.train_triples.relation2id,
+        #                            max_label_value=self.train_triples.max_n_label)
+        # self.test_triples = GRData(args, 'test_pos', 'test_neg')
 
     def get_train(self):
         return self.train_triples
@@ -776,11 +780,13 @@ class GraphSampler(object):
         return self.test_triples
     
     def generate_ind_test(self):
-        adj_list, dgl_adj_list, triplets, entity2id, relation2id, id2entity, id2relation = self.load_data_grail_ind()
+        adj_list, dgl_adj_list, triplets, entity2id, relation2id, id2entity, id2relation, m_h2r, m_t2r = self.load_data_grail_ind()
         neg_triplets = self.get_neg_samples_replacing_head_tail(triplets['test'], adj_list)
         
         self.adj_list = adj_list
         self.dgl_adj_list = dgl_adj_list
+        self.m_h2r = m_h2r
+        self.m_t2r = m_t2r
 
         return neg_triplets
 
@@ -798,6 +804,55 @@ class GraphSampler(object):
         idx2rel = {i: r for r, i in rel2idx.items()}
         idx2ent = {i: e for e, i in ent2idx.items()}
 
+        num_rels = len(idx2rel)
+        num_ents = len(idx2ent)
+        h2r = {}
+        h2r_len = {}
+        t2r = {}
+        t2r_len = {}
+        m_h2r = {}
+        m_t2r = {}
+        if self.args.model_name == 'SNRI':
+            for triplet in triplets['train']:
+                h, t, r = triplet
+                if h not in h2r:
+                    h2r_len[h] = 1
+                    h2r[h] = [r]
+                else:
+                    h2r_len[h] += 1
+                    h2r[h].append(r)
+                
+                if t not in t2r:
+                    t2r[t] = [r]
+                    t2r_len[t]  = 1
+                else:
+                    t2r[t].append(r)
+                    t2r_len[t] += 1
+                
+            # Construct the matrix of ent2rels
+            h_nei_rels_len = int(np.percentile(list(h2r_len.values()), 75))
+            t_nei_rels_len = int(np.percentile(list(t2r_len.values()), 75))
+            
+            # The index "num_rels" of relation is considered as "padding" relation.
+            # Use padding relation to initialize matrix of ent2rels.
+            m_h2r = np.ones([num_ents, h_nei_rels_len]) * num_rels
+            for ent, rels in h2r.items():
+                if len(rels) > h_nei_rels_len:
+                    rels = np.array(rels)[np.random.choice(np.arange(len(rels)), h_nei_rels_len)]
+                    m_h2r[ent] = rels
+                else:
+                    rels = np.array(rels)
+                    m_h2r[ent][: rels.shape[0]] = rels      
+            
+            m_t2r = np.ones([num_ents, t_nei_rels_len]) * num_rels
+            for ent, rels in t2r.items():
+                if len(rels) > t_nei_rels_len:
+                    rels = np.array(rels)[np.random.choice(np.arange(len(rels)), t_nei_rels_len)]
+                    m_t2r[ent] = rels
+                else:
+                    rels = np.array(rels)
+                    m_t2r[ent][: rels.shape[0]] = rels   
+
         adj_list = []
         for i in range(len(rel2idx)):
             idx = np.argwhere(triplets['train'][:, 2] == i)
@@ -812,7 +867,7 @@ class GraphSampler(object):
         
         dgl_adj_list = ssp_multigraph_to_dgl(adj_list_aug)
 
-        return adj_list, dgl_adj_list, triplets, ent2idx, rel2idx, idx2ent, idx2rel
+        return adj_list, dgl_adj_list, triplets, ent2idx, rel2idx, idx2ent, idx2rel, m_h2r, m_t2r
 
     def get_neg_samples_replacing_head_tail(self, test_links, adj_list, num_samples=50):
         n, r = adj_list[0].shape[0], len(adj_list)

@@ -7,6 +7,7 @@ class indGNNLitModel(BaseLitModel):
 
     def __init__(self, model, args):
         super().__init__(model, args)
+        self.args = args
 
     def forward(self, x):
         return self.model(x)
@@ -23,12 +24,30 @@ class indGNNLitModel(BaseLitModel):
         neg_sample = batch["negative_sample"]
         pos_label = batch["positive_label"]
         neg_label = batch["negative_label"]
-        
-        # pos_score = self.model((pos_sample, pos_label))
-        # neg_score = self.model((neg_sample, neg_label))
-        pos_score = self.model(pos_sample)
-        neg_score = self.model(neg_sample)
+
+        if self.args.model_name == 'Grail':
+            pos_score = self.model((pos_sample, pos_label))
+            neg_score = self.model((neg_sample, neg_label))
+        elif self.args.model_name == 'CoMPILE':
+            pos_score = self.model(pos_sample)
+            neg_score = self.model(neg_sample)
+        elif self.args.model_name == 'SNRI':   
+            cor = batch["positive_cor"]
+            pos_score, s_G_pos, s_g_pos = self.model((pos_sample, pos_label), is_return_emb=True)
+            neg_score = self.model((neg_sample, neg_label))
         loss = self.loss(pos_score, neg_score)
+        if self.args.model_name == 'SNRI':
+            if self.args.coef_dgi_loss:
+                _, _, s_g_cor = self.model((cor, pos_label), is_return_emb=True, cor_graph=True)
+                lbl_1 = torch.ones(pos_sample.batch_size)
+                lbl_2 = torch.zeros(pos_sample.batch_size)
+                lbl = torch.cat((lbl_1, lbl_2)).type_as(pos_score)
+                logits = self.model.get_logits(s_G_pos, s_g_pos, s_g_cor)
+                self.b_xent = torch.nn.BCEWithLogitsLoss()
+                dgi_loss = self.b_xent(logits, lbl)
+
+                loss = loss + self.args.coef_dgi_loss * dgi_loss
+
         self.log("Train|loss", loss,  on_step=False, on_epoch=True)
 
         logging.info("Train|loss: %.4f at epoch %d" %(loss, self.current_epoch+1))  #TODO: 把logging改到BaseLitModel里面
@@ -42,11 +61,15 @@ class indGNNLitModel(BaseLitModel):
         pos_label = batch["graph_pos_label"]
         neg_label = batch["graph_neg_label"]
         
-        # score_pos = self.model(pos_sample)
-        # score_neg = self.model(neg_sample)
-        score_pos = self.model(pos_sample[0])
-        score_neg = self.model(neg_sample[0])
-
+        if self.args.model_name == 'Grail':
+            score_pos = self.model(pos_sample)
+            score_neg = self.model(neg_sample)
+        elif self.args.model_name == 'CoMPILE':
+            score_pos = self.model(pos_sample[0])
+            score_neg = self.model(neg_sample[0])
+        elif self.args.model_name == 'SNRI':
+            score_pos = self.model(pos_sample)
+            score_neg = self.model(neg_sample)
         results['pos_scores'] = score_pos.squeeze(1).detach().cpu().tolist()
         results['neg_scores'] = score_neg.squeeze(1).detach().cpu().tolist()
         results['pos_labels']  = pos_label
@@ -65,49 +88,49 @@ class indGNNLitModel(BaseLitModel):
     
     def test_step(self, batch, batch_idx):
 
-        # results = dict()
-        # ranks = link_predict(batch, self.model, prediction='ind')
-        # results["count"] = torch.numel(ranks)
-        # results["mrr"] = torch.sum(1.0 / ranks).item()
-        # for k in self.args.calc_hits:
-        #     results['hits@{}'.format(k)] = torch.numel(ranks[ranks <= k])
-        # return results
-
         results = dict()
-        pos_sample = batch["positive_sample"]
-        neg_sample = batch["negative_sample"]
-        pos_label = batch["graph_pos_label"]
-        neg_label = batch["graph_neg_label"]
-        
-        # score_pos = self.model(pos_sample)
-        # score_neg = self.model(neg_sample)
-        score_pos = self.model(pos_sample[0])
-        score_neg = self.model(neg_sample[0])
-
-        results['pos_scores'] = score_pos.squeeze(1).detach().cpu().tolist()
-        results['neg_scores'] = score_neg.squeeze(1).detach().cpu().tolist()
-        results['pos_labels']  = pos_label
-        results['neg_labels']  = neg_label
+        ranks = link_predict(batch, self.model, prediction='ind', model_name=self.args.model_name)
+        results["count"] = torch.numel(ranks)
+        results["mrr"] = torch.sum(1.0 / ranks).item()
+        for k in self.args.calc_hits:
+            results['hits@{}'.format(k)] = torch.numel(ranks[ranks <= k])
         return results
+
+        # results = dict()
+        # pos_sample = batch["positive_sample"]
+        # neg_sample = batch["negative_sample"]
+        # pos_label = batch["graph_pos_label"]
+        # neg_label = batch["graph_neg_label"]
+        
+        # # score_pos = self.model(pos_sample)
+        # # score_neg = self.model(neg_sample)
+        # score_pos = self.model(pos_sample[0])
+        # score_neg = self.model(neg_sample[0])
+
+        # results['pos_scores'] = score_pos.squeeze(1).detach().cpu().tolist()
+        # results['neg_scores'] = score_neg.squeeze(1).detach().cpu().tolist()
+        # results['pos_labels']  = pos_label
+        # results['neg_labels']  = neg_label
+        # return results
 
 
     def test_epoch_end(self, results) -> None:
-        # outputs = self.get_results(results, "Test")
+        outputs = self.get_results(results, "Test")
 
-        # logging.info("++++++++++++++++++++++++++start testing++++++++++++++++++++++++++")
-        # log_metrics(self.current_epoch+1, outputs)
-        # logging.info("++++++++++++++++++++++++++over testing+++++++++++++++++++++++++++")
-
-        # self.log_dict(outputs, prog_bar=True, on_epoch=True)
-
-        outputs = self.get_auc(results, "Test")
-        # self.log("Eval|mrr", outputs["Eval|mrr"], on_epoch=True)
-        if self.current_epoch!=0:
-            logging.info("++++++++++++++++++++++++++start Test++++++++++++++++++++++++++")
-            log_metrics(self.current_epoch+1, outputs)
-            logging.info("++++++++++++++++++++++++++over Test+++++++++++++++++++++++++++")
+        logging.info("++++++++++++++++++++++++++start testing++++++++++++++++++++++++++")
+        log_metrics(self.current_epoch+1, outputs)
+        logging.info("++++++++++++++++++++++++++over testing+++++++++++++++++++++++++++")
 
         self.log_dict(outputs, prog_bar=True, on_epoch=True)
+
+        # outputs = self.get_auc(results, "Test")
+        # # self.log("Eval|mrr", outputs["Eval|mrr"], on_epoch=True)
+        # if self.current_epoch!=0:
+        #     logging.info("++++++++++++++++++++++++++start Test++++++++++++++++++++++++++")
+        #     log_metrics(self.current_epoch+1, outputs)
+        #     logging.info("++++++++++++++++++++++++++over Test+++++++++++++++++++++++++++")
+
+        # self.log_dict(outputs, prog_bar=True, on_epoch=True)
 
     def configure_optimizers(self):
         """Setting optimizer and lr_scheduler.

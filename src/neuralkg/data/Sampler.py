@@ -1079,6 +1079,35 @@ class ValidDglSampler2(object):
     def get_sampling_keys(self):
         return ['positive_sample', 'negative_sample', 'graph_label_pos', 'graph_label_neg']
 
+class ValidSNRISampler(object):
+    def __init__(self, sampler):
+        self.sampler = sampler
+        self.args = sampler.args
+
+    def sampling(self, data):
+        batch_data = {}
+
+        graphs_pos, g_labels_pos, r_labels_pos, graphs_negs, g_labels_negs, r_labels_negs = map(list, zip(*data))
+        batched_graph_pos = dgl.batch(graphs_pos)
+
+        graphs_neg = [item for sublist in graphs_negs for item in sublist]
+        g_labels_neg = [item for sublist in g_labels_negs for item in sublist]
+        r_labels_neg = [item for sublist in r_labels_negs for item in sublist]
+
+        batched_graph_neg = dgl.batch(graphs_neg)
+        
+        r_labels_pos = torch.LongTensor(r_labels_pos)
+        r_labels_neg = torch.LongTensor(r_labels_neg)
+
+        batch_data["positive_sample"] = (batched_graph_pos, r_labels_pos)
+        batch_data["negative_sample"] = (batched_graph_neg, r_labels_neg)
+        batch_data["graph_pos_label"] =  g_labels_pos
+        batch_data["graph_neg_label"] =  g_labels_neg
+        return batch_data
+
+    def get_sampling_keys(self):
+        return ['positive_sample', 'negative_sample', 'graph_pos_label', 'graph_neg_label']
+
 class TestDglSampler(object):
     def __init__(self, sampler):
         self.sampler = sampler
@@ -1214,6 +1243,87 @@ class TestDglSampler2(object):
         r_labels = torch.LongTensor(r_labels)
 
         return (subgraphs, r_labels)
+
+    def prepare_features(self, subgraph, n_labels, max_n_label, n_feats=None):
+        # One hot encode the node label feature and concat to n_featsure
+        n_nodes = subgraph.number_of_nodes()
+        label_feats = np.zeros((n_nodes, max_n_label[0] + 1 + max_n_label[1] + 1))
+        label_feats[np.arange(n_nodes), n_labels[:, 0]] = 1
+        label_feats[np.arange(n_nodes), max_n_label[0] + 1 + n_labels[:, 1]] = 1
+        n_feats = np.concatenate((label_feats, n_feats), axis=1) if n_feats is not None else label_feats
+        subgraph.ndata['feat'] = torch.FloatTensor(n_feats)
+
+        head_id = np.argwhere([label[0] == 0 and label[1] == 1 for label in n_labels])
+        tail_id = np.argwhere([label[0] == 1 and label[1] == 0 for label in n_labels])
+        n_ids = np.zeros(n_nodes)
+        n_ids[head_id] = 1  # head
+        n_ids[tail_id] = 2  # tail
+        subgraph.ndata['id'] = torch.FloatTensor(n_ids)
+
+        return subgraph
+
+class TestSNRISampler(object):
+    def __init__(self, sampler):
+        self.sampler = sampler
+        self.args = sampler.args
+        self.m_h2r = sampler.m_h2r
+        self.m_t2r = sampler.m_t2r
+
+    def sampling(self, data): # NOTE: data or test 
+        batch_data = {}
+
+        test = data[0]
+        head_neg_links = test['head'][0]
+        tail_neg_links = test['tail'][0]
+
+        batch_data['head_sample'] = self.get_subgraphs(head_neg_links, self.sampler.adj_list, \
+                self.sampler.dgl_adj_list, self.args.max_n_label, self.m_h2r, self.m_t2r)
+        batch_data['tail_sample'] = self.get_subgraphs(tail_neg_links, self.sampler.adj_list, \
+            self.sampler.dgl_adj_list, self.args.max_n_label, self.m_h2r, self.m_t2r)
+        batch_data['head_target'] = test['head'][1]
+        batch_data['tail_target'] = test['tail'][1]
+        return batch_data
+
+    def get_sampling_keys(self):
+        return ['head_sample', 'tail_sample', 'head_target', 'tail_target']
+
+    def get_subgraphs(self, all_links, adj_list, dgl_adj_list, max_node_label_value, m_h2r, m_t2r):
+        # dgl_adj_list = ssp_multigraph_to_dgl(adj_list)
+
+        subgraphs = []
+        r_labels = []
+        for link in all_links:
+            head, tail, rel = link[0], link[1], link[2]
+            nodes, node_labels, _, _, _ = subgraph_extraction_labeling((head, tail), rel, adj_list, h=self.args.hop,
+                                        enclosing_sub_graph=self.args.enclosing_sub_graph, max_node_label_value=max_node_label_value)
+
+            subgraph = dgl_adj_list.subgraph(nodes)
+            subgraph.edata['type'] = dgl_adj_list.edata['type'][subgraph.edata[dgl.EID]]
+            subgraph.edata['label'] = torch.tensor(rel * np.ones(subgraph.edata['type'].shape), dtype=torch.long)
+
+            try:
+                edges_btw_roots = subgraph.edge_ids(torch.LongTensor([0]), torch.LongTensor([1]))
+            except:
+                edges_btw_roots = torch.LongTensor([])
+
+            rel_link = np.nonzero(subgraph.edata['type'][edges_btw_roots] == rel)
+            if rel_link.squeeze().nelement() == 0:
+                subgraph = dgl.add_edges(subgraph, torch.tensor([0]), torch.tensor([1]),
+                                        {'type': torch.LongTensor([rel]),
+                                        'label': torch.LongTensor([rel])})
+            
+            # subgraph.ndata['parent_id'] = dgl_adj_list.subgraph(nodes).parent_nid
+            subgraph.ndata['out_nei_rels'] = torch.LongTensor(m_h2r[subgraph.ndata[dgl.NID]])
+            subgraph.ndata['in_nei_rels'] = torch.LongTensor(m_t2r[subgraph.ndata[dgl.NID]])
+            subgraph.ndata['r_label'] = torch.LongTensor(np.ones(subgraph.number_of_nodes()) * rel)
+            subgraph = self.prepare_features(subgraph, node_labels, max_node_label_value)
+            subgraphs.append(subgraph)
+            r_labels.append(rel)
+
+        batched_graph = dgl.batch(subgraphs)
+        r_labels = torch.LongTensor(r_labels)
+
+        return (batched_graph, r_labels)
 
     def prepare_features(self, subgraph, n_labels, max_n_label, n_feats=None):
         # One hot encode the node label feature and concat to n_featsure

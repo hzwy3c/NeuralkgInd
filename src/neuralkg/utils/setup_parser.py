@@ -131,10 +131,19 @@ def setup_parser():
     parser.add_argument("--max_nodes_per_hop", "-max_h", type=int, default=None, help="if > 0, upper bound the # nodes per hop by subsampling") # 每跳最大节点数
     parser.add_argument("--constrained_neg_prob", "-cn", type=float, default=0.0, help='with what probability to sample constrained heads/tails while neg sampling') # 负采样
     parser.add_argument("--directed", type=bool, default=False, help='Whether subgraph is directed or undirected') # 子图是否有向
-    
     #SNRI
     parser.add_argument('--sort_data', type=bool, default=True, help='whether to training data according to relation id ')
     parser.add_argument('--init_nei_rels', type=str, choices=['no', 'out', 'in', 'both'], default='in', help='the manner of utilizing relatioins when initializing entity embedding')
+    parser.add_argument('--sem_dim', type=int, default=24, help='the dimension of sematic part of node embedding')
+    parser.add_argument('--max_nei_rels', type=int, default=10, help='the maximum num of neighbor relations of each node when initialzing the node embedding.')
+    parser.add_argument('--nei_rels_dropout', type=float, default=0.4, help='Dropout rate in aggregating relation embeddings.')
+    parser.add_argument('--is_comp', type=str, default='mult', choices=['mult', 'sub'], help='The composition manner of node and relation')
+    parser.add_argument('--comp_ht', type=str, choices=['mult, mlp, sum'], default='sum', help='The composition operator of head and tail embedding')
+    parser.add_argument('--comp_hrt', type=str, choices=['TransE, DistMult'], default=None, help='The composition operator of (h, r, t)embedding')
+    parser.add_argument('--coef_dgi_loss', type=float, default=5, help='Coefficient of MI loss')
+    parser.add_argument('--nei_rel_path', action='store_false', help='whether to consider neighboring relational paths')
+    parser.add_argument('--path_agg', type=str, choices=['mean', 'att'], default='att', help='the manner of aggreating neighboring relational paths.')
+
 
     # Get data, model, and LitModel specific arguments
     lit_model_group = parser.add_argument_group("LitModel Args")

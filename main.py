@@ -89,7 +89,7 @@ def main():
         log_name = "_".join([args.model_name, args.dataset_name, str(args.lr)])
         logger = pl.loggers.WandbLogger(name=log_name, project="NeuralKG-ind")
         logger.log_hyperparams(vars(args))
-    if args.model_name == "Grail" or args.model_name == "CoMPILE":
+    if args.model_name == "Grail" or args.model_name == "CoMPILE" or args.model_name == 'SNRI':
 
         early_callback = pl.callbacks.EarlyStopping(
             monitor="Eval|aoc",
@@ -157,7 +157,7 @@ def main():
         save_config(args)
     if args.use_wandb:
         logger.watch(lit_model)
-    
+        
     if not args.test_only:
         # train&valid
         trainer.fit(lit_model, datamodule=kgdata)

@@ -1,5 +1,4 @@
 DATA_DIR=dataset
-OUTPUT_DIR=output
 
 MODEL_NAME=CoMPILE
 DATASET_NAME=WN18RR_v3
@@ -12,20 +11,21 @@ VALID_SAMPLER_CLASS=ValidDglSampler2
 TEST_SAMPLER_CLASS=NewDglSampler2
 LITMODEL_NAME=indGNNLitModel
 LOSS=Margin_Loss
-MAX_EPOCHS=100
+MAX_EPOCHS=30
 EMB_DIM=32
 TRAIN_BS=16
 EVAL_BS=16
 TEST_BS=1
 NUM_NEG=100
 MARGIN=10.0
-LR=1e-2
-CHECK_PER_EPOCH=2
+LR=1e-3 
+CHECK_PER_EPOCH=1
 EARLY_STOP_PATIENCE=20
 NUM_WORKERS=20
 DROPOUT=0
 CALC_HITS=1,5,10
 GPU=1
+CHECKPOINT_DIR=output/link_prediction/WN18RR_v3/CoMPILE/epoch\=16-Eval\|aoc\=0.988.ckpt
 
 CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --model_name $MODEL_NAME \
@@ -52,6 +52,5 @@ CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --num_workers $NUM_WORKERS \
     --dropout $DROPOUT \
     --calc_hits $CALC_HITS \
+    --checkpoint_dir $CHECKPOINT_DIR \
     --test_only
-    
-
