@@ -756,6 +756,7 @@ class GraphSampler(object):
         self.train_triples = GRData(args, 'train_pos', 'train_neg')
         self.valid_triples = GRData(args, 'valid_pos', 'valid_neg')
         self.n_feat_dim = self.train_triples.n_feat_dim
+
         if self.args.model_name == 'SNRI':
             if args.init_nei_rels == 'no':
                 args.inp_dim = self.n_feat_dim
@@ -763,12 +764,15 @@ class GraphSampler(object):
                 args.inp_dim = self.n_feat_dim + args.sem_dim
             self.valid_triples.m_h2r = self.train_triples.m_h2r
             self.valid_triples.m_t2r = self.train_triples.m_t2r
-        self.test_triples = self.generate_ind_test()
-        # if args.test_db_path is not None and not os.path.exists(args.test_db_path):
-        #     gen_subgraph_datasets(args, splits=['test'],
-        #                            saved_relation2id=self.train_triples.relation2id,
-        #                            max_label_value=self.train_triples.max_n_label)
-        # self.test_triples = GRData(args, 'test_pos', 'test_neg')
+
+        if self.args.test_metric == 'hit':
+            self.test_triples = self.generate_ind_test()
+        elif self.args.test_metric == 'auc':
+            if args.test_db_path is not None and not os.path.exists(args.test_db_path):
+                gen_subgraph_datasets(args, splits=['test'],
+                                    saved_relation2id=self.train_triples.relation2id,
+                                    max_label_value=self.train_triples.max_n_label)
+            self.test_triples = GRData(args, 'test_pos', 'test_neg')
 
     def get_train(self):
         return self.train_triples

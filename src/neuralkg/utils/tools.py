@@ -378,13 +378,14 @@ def intialize_worker(A, params, max_label_value):
 
 def extract_save_subgraph(args_):
     idx, (n1, n2, r_label), g_label = args_
-    nodes, n_labels, subgraph_size, enc_ratio, num_pruned_nodes = subgraph_extraction_labeling((n1, n2), r_label, A_, params_.hop, params_.enclosing_sub_graph, params_.max_nodes_per_hop)
+    nodes, n_labels, subgraph_size, enc_ratio, num_pruned_nodes, dis_nodes, dis_n_labels = subgraph_extraction_labeling((n1, n2), r_label, A_, params_.hop, params_.enclosing_sub_graph, params_.max_nodes_per_hop)
 
     # max_label_value_ is to set the maximum possible value of node label while doing double-radius labelling.
     if max_label_value_ is not None:
         n_labels = np.array([np.minimum(label, max_label_value_).tolist() for label in n_labels])
+        dis_n_labels = np.array([np.minimum(label, max_label_value_).tolist() for label in dis_n_labels])
 
-    datum = {'nodes': nodes, 'r_label': r_label, 'g_label': g_label, 'n_labels': n_labels, 'subgraph_size': subgraph_size, 'enc_ratio': enc_ratio, 'num_pruned_nodes': num_pruned_nodes}
+    datum = {'nodes': nodes, 'r_label': r_label, 'g_label': g_label, 'n_labels': n_labels, 'subgraph_size': subgraph_size, 'enc_ratio': enc_ratio, 'num_pruned_nodes': num_pruned_nodes, 'dis_nodes':dis_nodes, 'dis_n_labels':dis_n_labels}
     str_id = '{:08}'.format(idx).encode('ascii')
 
     return (str_id, datum)
@@ -473,30 +474,32 @@ def subgraph_extraction_labeling(ind, rel, A_list, h=1, enclosing_sub_graph=Fals
     subgraph_nei_nodes_un = root1_nei.union(root2_nei)
 
     # Extract subgraph | Roots being in the front is essential for labelling and the model to work properly.
-    if enclosing_sub_graph:
-        subgraph_nodes = list(ind) + list(subgraph_nei_nodes_int)
-    else:
-        subgraph_nodes = list(ind) + list(subgraph_nei_nodes_un)
+    subgraph_nodes = list(ind) + list(subgraph_nei_nodes_int)
+    disclosing_subgraph_nodes = list(ind) + list(subgraph_nei_nodes_un)
 
     subgraph = [adj[subgraph_nodes, :][:, subgraph_nodes] for adj in A_list]
+    disclosing_subgraph = [adj[disclosing_subgraph_nodes, :][:, disclosing_subgraph_nodes] for adj in A_list]
 
-    labels, enclosing_subgraph_nodes = node_label(incidence_matrix(subgraph), max_distance=h)
+    labels, enclosing_subgraph_nodes = node_label(incidence_matrix(subgraph), max_distance=h, enclosing_flag=True)
+    disclosing_labels, disclosing_subgraph_nodes_labeled = node_label(incidence_matrix(disclosing_subgraph), max_distance=h, enclosing_flag=False)
 
     pruned_subgraph_nodes = np.array(subgraph_nodes)[enclosing_subgraph_nodes].tolist()
     pruned_labels = labels[enclosing_subgraph_nodes]
-    # pruned_subgraph_nodes = subgraph_nodes
-    # pruned_labels = labels
+   
+    pruned_disclosing_subgraph_nodes = np.array(disclosing_subgraph_nodes)[disclosing_subgraph_nodes_labeled].tolist()
+    pruned_disclosing_labels = disclosing_labels[disclosing_subgraph_nodes_labeled]
 
     if max_node_label_value is not None:
         pruned_labels = np.array([np.minimum(label, max_node_label_value).tolist() for label in pruned_labels])
+        pruned_disclosing_labels = np.array([np.minimum(label, max_node_label_value).tolist() for label in pruned_disclosing_labels])
 
     subgraph_size = len(pruned_subgraph_nodes)
     enc_ratio = len(subgraph_nei_nodes_int) / (len(subgraph_nei_nodes_un) + 1e-3)
     num_pruned_nodes = len(subgraph_nodes) - len(pruned_subgraph_nodes)
 
-    return pruned_subgraph_nodes, pruned_labels, subgraph_size, enc_ratio, num_pruned_nodes
+    return pruned_subgraph_nodes, pruned_labels, subgraph_size, enc_ratio, num_pruned_nodes, pruned_disclosing_subgraph_nodes, pruned_disclosing_labels
 
-def node_label(subgraph, max_distance=1):
+def node_label(subgraph, max_distance=1, enclosing_flag=False):
     # implementation of the node labeling scheme described in the paper
     roots = [0, 1]
     sgs_single_root = [remove_nodes(subgraph, [root]) for root in roots]
@@ -506,7 +509,24 @@ def node_label(subgraph, max_distance=1):
     target_node_labels = np.array([[0, 1], [1, 0]])
     labels = np.concatenate((target_node_labels, dist_to_roots)) if dist_to_roots.size else target_node_labels
 
-    enclosing_subgraph_nodes = np.where(np.max(labels, axis=1) <= max_distance)[0]
+    if enclosing_flag:
+        enclosing_subgraph_nodes = np.where(np.max(labels, axis=1) <= max_distance)[0]
+    else:
+        # enclosing_subgraph_nodes = np.where(np.max(labels, axis=1) < 1e6)[0]
+        # process the unconnected node (neg samples)
+        indices_dim0, indices_dim1 = np.where(labels == 1e7)
+
+        indices_dim1_convert = indices_dim1 + 1
+        indices_dim1_convert[indices_dim1_convert == 2] = 0
+        new_indices = [indices_dim0.tolist(), indices_dim1_convert.tolist()]
+        ori_indices = [indices_dim0.tolist(), indices_dim1.tolist()]
+
+        values = labels[tuple(new_indices)] + 1
+        labels[tuple(ori_indices)] = values
+        # process the unconnected node (neg samples)
+
+        # print(labels)
+        enclosing_subgraph_nodes = np.where(np.max(labels, axis=1) <= max_distance)[0]
     return labels, enclosing_subgraph_nodes
 
 def remove_nodes(A_incidence, nodes):

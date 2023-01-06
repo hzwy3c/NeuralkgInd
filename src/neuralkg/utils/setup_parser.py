@@ -110,6 +110,7 @@ def setup_parser():
     parser.add_argument("--test_db_path", type=str, default=None, help='specify the path for test subgraph db')
     parser.add_argument("--pk_path", type=str, default=None, help='specify the path for pickle file')
     parser.add_argument('--ind_data_name', default='WN18RR_v1_ind', type=str, help="Name of dataset")
+    parser.add_argument('--test_metric', type=str, choices=['auc', 'hit'], default='hit', help='select test metric') # metric
     #model
     parser.add_argument("--num_bases", "-b", type=int, default=4, help="Number of basis functions to use for GCN weights") # bases
     parser.add_argument("--kge_model", type=str, default="TransE", help="Which KGE model to load entity embeddings from") # 解码器

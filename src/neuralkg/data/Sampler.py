@@ -1139,7 +1139,7 @@ class TestDglSampler(object):
 
         for link in all_links:
             head, tail, rel = link[0], link[1], link[2]
-            nodes, node_labels, _, _, _ = subgraph_extraction_labeling((head, tail), rel, adj_list, h=self.args.hop,
+            nodes, node_labels, _, _, _, _, _ = subgraph_extraction_labeling((head, tail), rel, adj_list, h=self.args.hop,
                                         enclosing_sub_graph=self.args.enclosing_sub_graph, max_node_label_value=max_node_label_value)
 
             subgraph = dgl_adj_list.subgraph(nodes)
@@ -1216,7 +1216,7 @@ class TestDglSampler2(object):
 
         for link in all_links:
             head, tail, rel = link[0], link[1], link[2]
-            nodes, node_labels, _, _, _ = subgraph_extraction_labeling((head, tail), rel, adj_list, h=self.args.hop,
+            nodes, node_labels, _, _, _, _, _ = subgraph_extraction_labeling((head, tail), rel, adj_list, h=self.args.hop,
                                         enclosing_sub_graph=self.args.enclosing_sub_graph, max_node_label_value=max_node_label_value)
 
             subgraph = dgl_adj_list.subgraph(nodes)
@@ -1294,7 +1294,7 @@ class TestSNRISampler(object):
         r_labels = []
         for link in all_links:
             head, tail, rel = link[0], link[1], link[2]
-            nodes, node_labels, _, _, _ = subgraph_extraction_labeling((head, tail), rel, adj_list, h=self.args.hop,
+            nodes, node_labels, _, _, _, _, _ = subgraph_extraction_labeling((head, tail), rel, adj_list, h=self.args.hop,
                                         enclosing_sub_graph=self.args.enclosing_sub_graph, max_node_label_value=max_node_label_value)
 
             subgraph = dgl_adj_list.subgraph(nodes)

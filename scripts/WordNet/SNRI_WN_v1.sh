@@ -15,14 +15,14 @@ EMB_DIM=32
 TRAIN_BS=16
 EVAL_BS=16
 TEST_BS=1
-NUM_NEG=100
 MARGIN=10.0
-LR=1e-3 
+LR=1e-4
 CHECK_PER_EPOCH=3
 EARLY_STOP_PATIENCE=20
 NUM_WORKERS=20
-DROPOUT=0
+DROPOUT=0.5
 CALC_HITS=1,5,10
+CHECKPOINT_DIR=/home/lli/NeuralKG-ind-NeuralKG-ind/output/link_prediction/WN18RR_v1/SNRI/epoch\=29-Eval\|aoc\=0.974.ckpt
 GPU=1
 
 CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
@@ -41,7 +41,6 @@ CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --train_bs $TRAIN_BS \
     --eval_bs $EVAL_BS \
     --test_bs $TEST_BS \
-    --num_neg $NUM_NEG \
     --margin $MARGIN \
     --lr $LR \
     --check_per_epoch $CHECK_PER_EPOCH \
@@ -49,3 +48,5 @@ CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --num_workers $NUM_WORKERS \
     --dropout $DROPOUT \
     --calc_hits $CALC_HITS \
+    --checkpoint_dir $CHECKPOINT_DIR \
+    --test_only

@@ -74,7 +74,7 @@ class CoMPILE(nn.Module):
             self._modules['W_h_node_{}'.format(depth)] = nn.Linear(self.hidden_size, self.hidden_size, bias=self.bias)
 
     def forward(self, subgraph):
-        # subgraph = subgraph[0]
+        subgraph = subgraph[0]
         target_relation = []
         for i in range(len(subgraph)):
             graph = subgraph[i]
@@ -92,7 +92,6 @@ class CoMPILE(nn.Module):
         out_conv = (self.linear1(conv_input))
         out_conv = self.linear2(out_conv)
         return out_conv
-
 
     def batch_subgraph(self, subgraph):
     
@@ -304,7 +303,6 @@ class MySpMM(torch.autograd.Function):
 def gnn_spmm(sp_mat, dense_mat):
     return MySpMM.apply(sp_mat, dense_mat)    
 
-
 def get_activation_function(activation):
     """
     Gets an activation function module given the name of the activation.
@@ -325,8 +323,7 @@ def get_activation_function(activation):
     elif activation == 'ELU':
         return nn.ELU()
     else:
-        raise ValueError('Activation "{}" not supported.'.format(activation))
-        
+        raise ValueError('Activation "{}" not supported.'.format(activation))        
         
 class BatchGRU(nn.Module):
     def __init__(self, hidden_size=300):
