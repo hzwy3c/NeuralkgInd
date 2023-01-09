@@ -29,10 +29,7 @@ def link_predict(batch, model, prediction="all", model_name=None):
 
 def ind_predict(batch, model, model_name=None):
     head_triple = batch["head_sample"]
-    if model_name == 'CoMPILE':
-        head_scores = model(head_triple[0]).squeeze(1).detach().cpu().numpy()
-    else:
-        head_scores = model(head_triple).squeeze(1).detach().cpu().numpy()
+    head_scores = model(head_triple).squeeze(1).detach().cpu().numpy()
     head_target = batch["head_target"]
     if head_target != 10000:  
         head_rank = np.argwhere(np.argsort(head_scores)[::-1] == head_target) + 1

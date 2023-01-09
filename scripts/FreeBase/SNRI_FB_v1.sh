@@ -7,7 +7,7 @@ DB_PATH=$DATA_DIR/fb237_v1_subgraph
 PK_PATH=$DATA_DIR/fb237_v1.pkl
 TRAIN_SAMPLER_CLASS=SNRISampler
 VALID_SAMPLER_CLASS=ValidSNRISampler
-TEST_SAMPLER_CLASS=TestSNRISampler
+TEST_SAMPLER_CLASS=NewDglSampler2
 LITMODEL_NAME=indGNNLitModel
 LOSS=Margin_Loss
 MAX_EPOCHS=30
@@ -24,6 +24,9 @@ NUM_WORKERS=20
 DROPOUT=0
 CALC_HITS=1,5,10
 GPU=1
+CHECKPOINT_DIR=/home/lli/NeuralKG-ind-NeuralKG-ind/output/link_prediction/fb237_v1/SNRI/epoch\=23-Eval\|aoc\=0.869.ckpt
+TEST_METRIC=auc
+TEST_DB_PATH=$DATA_DIR/fb237_v1_ind/test_subgraphs
 
 CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --model_name $MODEL_NAME \
@@ -49,3 +52,7 @@ CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --num_workers $NUM_WORKERS \
     --dropout $DROPOUT \
     --calc_hits $CALC_HITS \
+    --test_metric $TEST_METRIC \
+    --test_db_path $TEST_DB_PATH \
+    --checkpoint_dir $CHECKPOINT_DIR \
+    --test_only

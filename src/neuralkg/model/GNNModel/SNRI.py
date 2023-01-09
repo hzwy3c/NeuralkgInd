@@ -150,7 +150,7 @@ class SNRI(nn.Module):
     def forward(self, data, is_return_emb=False, cor_graph=False):
         # Initialize the embedding of entities
         g, rel_labels = data
-        
+
         # Neighboring Relational Feature Module
         ## Initialize the embedding of nodes by neighbor relations
         if self.params.init_nei_rels == 'no':

@@ -90,7 +90,7 @@ class indGNNLitModel(BaseLitModel):
             neg_sample = batch["negative_sample"]
             pos_label = batch["graph_pos_label"]
             neg_label = batch["graph_neg_label"]
-            
+
             score_pos = self.model(pos_sample)
             score_neg = self.model(neg_sample)
 

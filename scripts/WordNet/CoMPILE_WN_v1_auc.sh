@@ -26,6 +26,7 @@ DROPOUT=0
 CALC_HITS=1,5,10
 GPU=1
 CHECKPOINT_DIR=/home/lli/NeuralKG-ind-NeuralKG-ind/output/link_prediction/WN18RR_v1/CoMPILE/epoch\=24-Eval\|aoc\=0.978.ckpt
+TEST_METRIC=auc
 
 CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --model_name $MODEL_NAME \
@@ -53,4 +54,5 @@ CUDA_VISIBLE_DEVICES=$GPU python -u main.py \
     --dropout $DROPOUT \
     --calc_hits $CALC_HITS \
     --checkpoint_dir $CHECKPOINT_DIR \
+    --test_metric $TEST_METRIC \
     --test_only

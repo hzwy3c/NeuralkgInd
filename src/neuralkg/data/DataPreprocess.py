@@ -9,7 +9,7 @@ import numpy as np
 from scipy.sparse import csc_matrix
 from torch.utils.data import Dataset
 from collections import defaultdict as ddict
-from neuralkg.utils import deserialize
+from neuralkg.utils import deserialize, deserialize2
 from neuralkg.utils.tools import ssp_multigraph_to_dgl, gen_subgraph_datasets
 
 class KGData(object):
@@ -232,15 +232,19 @@ class GRData(Dataset):
     def __init__(self, args, db_name_pos, db_name_neg):
         
         self.args = args
-        if db_name_pos == 'test_pos':
-            self.main_env = lmdb.open(self.args.test_db_path, readonly=True, max_dbs=3, lock=False)
+        if self.args.model_name == 'RMPI':
+            self.max_dbs = 5
         else:
-            self.main_env = lmdb.open(self.args.db_path, readonly=True, max_dbs=3, lock=False)
+            self.max_dbs = 3
+        if db_name_pos == 'test_pos':
+            self.main_env = lmdb.open(self.args.test_db_path, readonly=True, max_dbs=self.max_dbs, lock=False)
+        else:
+            self.main_env = lmdb.open(self.args.db_path, readonly=True, max_dbs=self.max_dbs, lock=False)
         self.db_pos = self.main_env.open_db(db_name_pos.encode())
         self.db_neg = self.main_env.open_db(db_name_neg.encode())
 
         if db_name_pos == 'test_pos':
-            ssp_graph, __, __, relation2id, id2entity, id2relation = self.load_ind_data_grail()
+            ssp_graph, __, __, relation2id, id2entity, id2relation, _, m_h2r, _, m_t2r = self.load_ind_data_grail()
         else:
             ssp_graph, __, __, relation2id, id2entity, id2relation, _, m_h2r, _, m_t2r = self.load_data_grail()
         self.relation2id = relation2id
@@ -270,20 +274,20 @@ class GRData(Dataset):
             self.max_n_label[0] = int.from_bytes(txn.get('max_n_label_sub'.encode()), byteorder='little')
             self.max_n_label[1] = int.from_bytes(txn.get('max_n_label_obj'.encode()), byteorder='little')
 
-            self.avg_subgraph_size = struct.unpack('f', txn.get('avg_subgraph_size'.encode()))
-            self.min_subgraph_size = struct.unpack('f', txn.get('min_subgraph_size'.encode()))
-            self.max_subgraph_size = struct.unpack('f', txn.get('max_subgraph_size'.encode()))
-            self.std_subgraph_size = struct.unpack('f', txn.get('std_subgraph_size'.encode()))
+            # self.avg_subgraph_size = struct.unpack('f', txn.get('avg_subgraph_size'.encode()))
+            # self.min_subgraph_size = struct.unpack('f', txn.get('min_subgraph_size'.encode()))
+            # self.max_subgraph_size = struct.unpack('f', txn.get('max_subgraph_size'.encode()))
+            # self.std_subgraph_size = struct.unpack('f', txn.get('std_subgraph_size'.encode()))
 
-            self.avg_enc_ratio = struct.unpack('f', txn.get('avg_enc_ratio'.encode()))
-            self.min_enc_ratio = struct.unpack('f', txn.get('min_enc_ratio'.encode()))
-            self.max_enc_ratio = struct.unpack('f', txn.get('max_enc_ratio'.encode()))
-            self.std_enc_ratio = struct.unpack('f', txn.get('std_enc_ratio'.encode()))
+            # self.avg_enc_ratio = struct.unpack('f', txn.get('avg_enc_ratio'.encode()))
+            # self.min_enc_ratio = struct.unpack('f', txn.get('min_enc_ratio'.encode()))
+            # self.max_enc_ratio = struct.unpack('f', txn.get('max_enc_ratio'.encode()))
+            # self.std_enc_ratio = struct.unpack('f', txn.get('std_enc_ratio'.encode()))
 
-            self.avg_num_pruned_nodes = struct.unpack('f', txn.get('avg_num_pruned_nodes'.encode()))
-            self.min_num_pruned_nodes = struct.unpack('f', txn.get('min_num_pruned_nodes'.encode()))
-            self.max_num_pruned_nodes = struct.unpack('f', txn.get('max_num_pruned_nodes'.encode()))
-            self.std_num_pruned_nodes = struct.unpack('f', txn.get('std_num_pruned_nodes'.encode()))
+            # self.avg_num_pruned_nodes = struct.unpack('f', txn.get('avg_num_pruned_nodes'.encode()))
+            # self.min_num_pruned_nodes = struct.unpack('f', txn.get('min_num_pruned_nodes'.encode()))
+            # self.max_num_pruned_nodes = struct.unpack('f', txn.get('max_num_pruned_nodes'.encode()))
+            # self.std_num_pruned_nodes = struct.unpack('f', txn.get('std_num_pruned_nodes'.encode()))
 
         logging.info(f"Max distance from sub : {self.max_n_label[0]}, Max distance from obj : {self.max_n_label[1]}")
 
@@ -299,20 +303,33 @@ class GRData(Dataset):
     def __getitem__(self, index):
         with self.main_env.begin(db=self.db_pos) as txn:
             str_id = '{:08}'.format(index).encode('ascii')
-            nodes_pos, r_label_pos, g_label_pos, n_labels_pos = deserialize(txn.get(str_id)).values()
-            subgraph_pos = self.prepare_subgraphs(nodes_pos, r_label_pos, n_labels_pos)
+            if self.args.model_name == 'RMPI':
+                en_nodes_pos, r_label_pos, g_label_pos, en_n_labels_pos, dis_nodes_pos, dis_n_labels_pos = deserialize2(txn.get(str_id)).values()
+                subgraph_pos = self.prepare_subgraphs(en_nodes_pos, r_label_pos, en_n_labels_pos)
+                dis_subgraph_pos = self.prepare_subgraphs(dis_nodes_pos, r_label_pos, dis_n_labels_pos)
+            else:
+                nodes_pos, r_label_pos, g_label_pos, n_labels_pos = deserialize(txn.get(str_id)).values()
+                subgraph_pos = self.prepare_subgraphs(nodes_pos, r_label_pos, n_labels_pos)
         subgraphs_neg = []
+        dis_subgraphs_neg = []
         r_labels_neg = []
         g_labels_neg = []
         with self.main_env.begin(db=self.db_neg) as txn:
             for i in range(self.args.num_neg_samples_per_link):
                 str_id = '{:08}'.format(index + i * (self.num_graphs_pos)).encode('ascii')
-                nodes_neg, r_label_neg, g_label_neg, n_labels_neg = deserialize(txn.get(str_id)).values()
-                subgraphs_neg.append(self.prepare_subgraphs(nodes_neg, r_label_neg, n_labels_neg))
+                if self.args.model_name == 'RMPI':
+                    en_nodes_neg, r_label_neg, g_label_neg, en_n_labels_neg, dis_nodes_neg, dis_n_labels_neg = deserialize2(txn.get(str_id)).values()
+                    subgraphs_neg.append(self._prepare_subgraphs(en_nodes_neg, r_label_neg, en_n_labels_neg))
+                    dis_subgraphs_neg.append(self._prepare_subgraphs(dis_nodes_neg, r_label_neg, dis_n_labels_neg))
+                else:
+                    nodes_neg, r_label_neg, g_label_neg, n_labels_neg = deserialize(txn.get(str_id)).values()
+                    subgraphs_neg.append(self.prepare_subgraphs(nodes_neg, r_label_neg, n_labels_neg))
                 r_labels_neg.append(r_label_neg)
                 g_labels_neg.append(g_label_neg)
-
-        return subgraph_pos, g_label_pos, r_label_pos, subgraphs_neg, g_labels_neg, r_labels_neg
+        if self.args.model_name == 'RMPI':
+            return subgraph_pos, dis_subgraph_pos, g_label_pos, r_label_pos, subgraphs_neg, dis_subgraphs_neg, g_labels_neg, r_labels_neg
+        else:
+            return subgraph_pos, g_label_pos, r_label_pos, subgraphs_neg, g_labels_neg, r_labels_neg
 
     def __len__(self):
         return self.num_graphs_pos
@@ -321,7 +338,7 @@ class GRData(Dataset):
         data = pickle.load(open(self.args.pk_path, 'rb'))
 
         splits = ['train', 'valid']
-
+        
         triplets = {}
         for split_name in splits:
             triplets[split_name] = np.array(data['train_graph'][split_name])[:, [0, 2, 1]]
@@ -415,6 +432,67 @@ class GRData(Dataset):
         train_idx2rel = {i: r for r, i in train_rel2idx.items()}
         train_idx2ent = {i: e for e, i in train_ent2idx.items()}
 
+        h2r = {}
+        t2r = {}
+        m_h2r = {}
+        m_t2r = {}
+        if self.args.model_name == 'SNRI':
+            # Construct the the neighbor relations of each entity
+            num_rels = len(train_idx2rel)
+            num_ents = len(train_idx2ent)
+            h2r_len = {}
+            t2r_len = {}
+            
+            for triplet in triplets['train']:
+                h, t, r = triplet
+                if h not in h2r:
+                    h2r_len[h] = 1
+                    h2r[h] = [r]
+                else:
+                    h2r_len[h] += 1
+                    h2r[h].append(r)
+                
+                if self.args.add_traspose_rels:
+                    # Consider the reverse relation, the id of reverse relation is (relation + #relations)
+                    if t not in t2r:
+                        t2r[t] = [r + num_rels]
+                    else:
+                        t2r[t].append(r + num_rels)
+                if t not in t2r:
+                    t2r[t] = [r]
+                    t2r_len[t]  = 1
+                else:
+                    t2r[t].append(r)
+                    t2r_len[t] += 1
+
+            # Construct the matrix of ent2rels
+            h_nei_rels_len = int(np.percentile(list(h2r_len.values()), 75))
+            t_nei_rels_len = int(np.percentile(list(t2r_len.values()), 75))
+            
+            # The index "num_rels" of relation is considered as "padding" relation.
+            # Use padding relation to initialize matrix of ent2rels.
+            m_h2r = np.ones([num_ents, h_nei_rels_len]) * num_rels
+            for ent, rels in h2r.items():
+                if len(rels) > h_nei_rels_len:
+                    rels = np.array(rels)[np.random.choice(np.arange(len(rels)), h_nei_rels_len)]
+                    m_h2r[ent] = rels
+                else:
+                    rels = np.array(rels)
+                    m_h2r[ent][: rels.shape[0]] = rels      
+            
+            m_t2r = np.ones([num_ents, t_nei_rels_len]) * num_rels
+            for ent, rels in t2r.items():
+                if len(rels) > t_nei_rels_len:
+                    rels = np.array(rels)[np.random.choice(np.arange(len(rels)), t_nei_rels_len)]
+                    m_t2r[ent] = rels
+                else:
+                    rels = np.array(rels)
+                    m_t2r[ent][: rels.shape[0]] = rels
+
+            # Sort the data according to relation id 
+            if self.args.sort_data:
+                triplets['train'] = triplets['train'][np.argsort(triplets['train'][:,2])]
+
         adj_list = []
         for i in range(len(train_rel2idx)):
             idx = np.argwhere(triplets['train'][:, 2] == i)
@@ -422,7 +500,7 @@ class GRData(Dataset):
                                         (triplets['train'][:, 0][idx].squeeze(1), triplets['train'][:, 1][idx].squeeze(1))),
                                     shape=(len(train_ent2idx), len(train_ent2idx))))
 
-        return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel 
+        return adj_list, triplets, train_ent2idx, train_rel2idx, train_idx2ent, train_idx2rel, h2r, m_h2r, t2r, m_t2r
 
 
     def generate_train(self):
@@ -461,9 +539,17 @@ class GRData(Dataset):
             subgraph = dgl.add_edges(subgraph, torch.tensor([0]), torch.tensor([1]),
                                      {'type': torch.LongTensor([r_label]),
                                       'label': torch.LongTensor([r_label])})
+            e_ids = np.zeros(subgraph.number_of_edges())
+            e_ids[-1] = 1
+        else:
+            e_ids = np.zeros(subgraph.number_of_edges())
+            e_ids[edges_btw_roots] = 1  # target edge
+        
+        if self.args.model_name == 'RMPI':
+            subgraph.edata['id'] = torch.FloatTensor(e_ids)
 
         if  self.args.model_name == 'SNRI':
-            self.prepare_features_new(subgraph, n_labels, r_label)
+            subgraph = self.prepare_features_new(subgraph, n_labels, r_label)
         else:
             subgraph = self.prepare_features_new(subgraph, n_labels)
         if self.args.model_name == 'SNRI':
@@ -772,6 +858,7 @@ class GraphSampler(object):
                 gen_subgraph_datasets(args, splits=['test'],
                                     saved_relation2id=self.train_triples.relation2id,
                                     max_label_value=self.train_triples.max_n_label)
+
             self.test_triples = GRData(args, 'test_pos', 'test_neg')
 
     def get_train(self):
