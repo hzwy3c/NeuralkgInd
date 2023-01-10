@@ -95,7 +95,7 @@ class SNRISampler(GraphSampler):
     def get_sampling_keys(self):
         return ['positive_sample', 'positive_cor', 'negative_sample', 'positive_label', 'negative_label']
 
-class RMPISampler(GraphSampler):
+class RMPISampler(GraphSampler): #dev_RMPI
 
     def __init__(self, args):
         super().__init__(args)
@@ -1140,7 +1140,7 @@ class ValidSNRISampler(object):
     def get_sampling_keys(self):
         return ['positive_sample', 'negative_sample', 'graph_pos_label', 'graph_neg_label']
 
-class ValidRMPISampler(object):
+class ValidRMPISampler(object): #dev_RMPI
     def __init__(self, sampler):
         self.sampler = sampler
         self.args = sampler.args
@@ -1437,7 +1437,7 @@ class TestDglSampler_auc(object):
 
         return batch_data
 
-class DglSampler_P(object):
+class DglSampler_P(object): #dev_RMPI
     def __init__(self, sampler):
         self.sampler = sampler
         self.args = sampler.args
