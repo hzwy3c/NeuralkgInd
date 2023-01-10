@@ -5,8 +5,8 @@ import numpy as np
 
 
 
-class GraphClassifier(nn.Module):
-    def __init__(self, params):  # in_dim, h_dim, rel_emb_dim, out_dim, num_rels, num_bases):
+class RMPI(nn.Module):
+    def __init__(self, params):  # in_dim, h_dim, rel_emb_dim, out_dim, num_rel, num_bases):
         super().__init__()
 
         self.params = params
@@ -14,10 +14,10 @@ class GraphClassifier(nn.Module):
         # self.relation_list = list(self.relation2id.values())
         self.link_mode = 6
         self.is_big_dataset = False
-        self.is_big_dataset = True if self.params.dataset in ['wikidata_small'] else False
+        # self.is_big_dataset = True if self.params.dataset in ['wikidata_small'] else False
 
 
-        self.rel_emb = nn.Embedding(self.params.num_rels, self.params.rel_emb_dim, sparse=False)
+        self.rel_emb = nn.Embedding(self.params.num_rel, self.params.rel_emb_dim, sparse=False)
 
         torch.nn.init.normal_(self.rel_emb.weight)
 
@@ -51,19 +51,19 @@ class GraphClassifier(nn.Module):
         v_in_edge = graph.in_edges(v_node, 'all')
         v_out_edge = graph.out_edges(v_node, 'all')
 
-        edge_mask = self.drop(torch.ones(num_edges))
+        edge_mask = self.drop(torch.ones(num_edges).type_as(u_node))
         edge_mask = edge_mask.repeat(num_nodes, 1)
 
 
 
         in_edge_out = torch.sparse_coo_tensor(torch.cat((u_in_edge[1].unsqueeze(0), u_in_edge[2].unsqueeze(0)), 0),
-                                              torch.ones(len(u_in_edge[2])), size=torch.Size((num_nodes, num_edges)))
+                                              torch.ones(len(u_in_edge[2])).type_as(u_node), size=torch.Size((num_nodes, num_edges)))
         out_edge_out = torch.sparse_coo_tensor(torch.cat((u_out_edge[0].unsqueeze(0), u_out_edge[2].unsqueeze(0)), 0),
-                                               torch.ones(len(u_out_edge[2])), size=torch.Size((num_nodes, num_edges)))
+                                               torch.ones(len(u_out_edge[2])).type_as(u_node), size=torch.Size((num_nodes, num_edges)))
         in_edge_in = torch.sparse_coo_tensor(torch.cat((v_in_edge[1].unsqueeze(0), v_in_edge[2].unsqueeze(0)), 0),
-                                             torch.ones(len(v_in_edge[2])), size=torch.Size((num_nodes, num_edges)))
+                                             torch.ones(len(v_in_edge[2])).type_as(u_node), size=torch.Size((num_nodes, num_edges)))
         out_edge_in = torch.sparse_coo_tensor(torch.cat((v_out_edge[0].unsqueeze(0), v_out_edge[2].unsqueeze(0)), 0),
-                                              torch.ones(len(v_out_edge[2])), size=torch.Size((num_nodes, num_edges)))
+                                              torch.ones(len(v_out_edge[2])).type_as(u_node), size=torch.Size((num_nodes, num_edges)))
 
         if is_drop:
             in_edge_out = self.sparse_dense_mul(in_edge_out, edge_mask)
@@ -120,8 +120,8 @@ class GraphClassifier(nn.Module):
                 rel_neighbor_embd = sum(item)
 
             else:
-                rel_neighbor_embd = sum([torch.sparse.mm(edge_connect_l[i],
-                                                         self.fc_reld1[i](self.h0)) for i in
+                rel_neighbor_embd = sum([torch.sparse.mm(edge_connect_l[i].float(),
+                                                         self.fc_reld1[i](self.h0).float()) for i in
                                          range(self.link_mode)])
 
             return rel_neighbor_embd
@@ -221,10 +221,13 @@ class GraphClassifier(nn.Module):
 
 
         rel_edge_ids = [en_g.edge_id(head_ids[i], tail_ids[i]) for i in range(head_ids.shape[0])]
-
-        self.h1_extracted = self.h1[rel_edge_ids]
+        print(rel_edge_ids)
+        print(len(rel_edge_ids))
+        print(self.h1)
+        print(len(self.h1))
+        self.h1_extracted = self.h1[rel_edge_ids[:1]]
         self.rel_edge_ids = rel_edge_ids
-        self.rel_edge_ids = rel_edge_ids
+        # self.rel_edge_ids = rel_edge_ids
         h_1_N = self.rel_aggr(en_g, head_node, tail_node, num_nodes, num_edges, aggr_flag=1, is_drop=True)
 
         h_1_N = F.relu(h_1_N)
@@ -264,7 +267,7 @@ class GraphClassifier(nn.Module):
         i = s._indices()
         v = s._values()
         dv = d[i[0, :], i[1, :]]  # get values from relevant entries of dense matrix
-        return torch.sparse.FloatTensor(i, v * dv, s.size())
+        return torch.sparse.FloatTensor(i, v * dv, s.size()).type_as(s)
 
     @staticmethod
     def sparse_index_select(s, idx):

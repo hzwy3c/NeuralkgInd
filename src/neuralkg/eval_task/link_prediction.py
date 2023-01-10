@@ -38,10 +38,7 @@ def ind_predict(batch, model, model_name=None):
         head_rank = torch.tensor([10000])
 
     tail_triple = batch["tail_sample"]
-    if model_name == 'CoMPILE':
-        tail_scores = model(tail_triple[0]).squeeze(1).detach().cpu().numpy()
-    else:
-        tail_scores = model(tail_triple).squeeze(1).detach().cpu().numpy()
+    tail_scores = model(tail_triple).squeeze(1).detach().cpu().numpy()
     tail_target = batch["tail_target"]
     if tail_target != 10000:
         tail_rank = np.argwhere(np.argsort(tail_scores)[::-1] == tail_target) + 1

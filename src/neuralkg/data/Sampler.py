@@ -127,7 +127,6 @@ class RMPISampler(GraphSampler):
     def get_sampling_keys(self):
         return ['positive_sample', 'negative_sample', 'positive_label', 'negative_label']
 
-
 class UniSampler(BaseSampler):
     """Random negative sampling 
     Filtering out positive samples and selecting some samples randomly as negative samples.
@@ -1149,7 +1148,7 @@ class ValidRMPISampler(object):
     def sampling(self, data):
         batch_data = {}
 
-        en_graphs_pos, dis_graphs_pos, g_labels_pos, r_labels_pos, en_graphs_negs, dis_graphs_negs, g_labels_negs, r_labels_negs = map(list, zip(*samples))
+        en_graphs_pos, dis_graphs_pos, g_labels_pos, r_labels_pos, en_graphs_negs, dis_graphs_negs, g_labels_negs, r_labels_negs = map(list, zip(*data))
         batched_en_graph_pos = dgl.batch(en_graphs_pos)
         batched_dis_graph_pos = dgl.batch(dis_graphs_pos)
 
@@ -1409,7 +1408,7 @@ class TestSNRISampler(object):
 
         return subgraph
 
-class NewDglSampler2(object):
+class TestDglSampler_auc(object):
     def __init__(self, sampler):
         self.sampler = sampler
         self.args = sampler.args
@@ -1438,7 +1437,7 @@ class NewDglSampler2(object):
 
         return batch_data
 
-class DglSampler_F(object):
+class DglSampler_P(object):
     def __init__(self, sampler):
         self.sampler = sampler
         self.args = sampler.args

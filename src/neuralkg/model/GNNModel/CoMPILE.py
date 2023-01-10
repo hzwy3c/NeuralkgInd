@@ -276,9 +276,7 @@ class CoMPILE(nn.Module):
        # print(mol_vecs.shape, source_embed.shape, target_embed.shape)
 
         return mol_vecs, source_embed, target_embed         
-    
        
-    
     
 from torch.autograd import Variable    
 class MySpMM(torch.autograd.Function):

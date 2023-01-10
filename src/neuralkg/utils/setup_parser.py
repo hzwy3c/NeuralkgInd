@@ -144,7 +144,11 @@ def setup_parser():
     parser.add_argument('--coef_dgi_loss', type=float, default=5, help='Coefficient of MI loss')
     parser.add_argument('--nei_rel_path', action='store_false', help='whether to consider neighboring relational paths')
     parser.add_argument('--path_agg', type=str, choices=['mean', 'att'], default='att', help='the manner of aggreating neighboring relational paths.')
-
+    #RMPI
+    parser.add_argument('--target2nei_atten', action='store_true', help='apply target-aware attention for 2-hop neighbors')
+    parser.add_argument('--conc', action='store_true', help='apply target-aware attention for 2-hop neighbors')
+    parser.add_argument('--ablation', type=int, default=0, help='0,1 correspond to base, NE')
+    parser.add_argument("--l2", type=float, default=5e-4, help="Regularization constant for GNN weights")
 
     # Get data, model, and LitModel specific arguments
     lit_model_group = parser.add_argument_group("LitModel Args")

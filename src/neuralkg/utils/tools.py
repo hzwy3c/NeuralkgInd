@@ -50,7 +50,7 @@ def deserialize(data):
     keys = ('nodes', 'r_label', 'g_label', 'n_label')
     return dict(zip(keys, data_tuple))
 
-def deserialize2(data):
+def deserialize_RMPI(data):
     data_tuple = pickle.loads(data)
     keys = ('en_nodes', 'r_label', 'g_label', 'en_n_labels', 'dis_nodes', 'dis_n_labels')
     return dict(zip(keys, data_tuple))
@@ -634,7 +634,7 @@ def ssp_multigraph_to_dgl(graph, n_feats=None):
         for src, dst in list(zip(adj.tocoo().row, adj.tocoo().col)):
             nx_triplets.append((src, dst, {'type': rel}))
         g_nx.add_edges_from(nx_triplets)
-
+    
     g_dgl = dgl.from_networkx(g_nx, edge_attrs=['type'])
     if n_feats is not None:
         g_dgl.ndata['feat'] = torch.tensor(n_feats)

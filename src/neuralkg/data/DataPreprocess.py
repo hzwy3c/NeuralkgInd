@@ -9,7 +9,7 @@ import numpy as np
 from scipy.sparse import csc_matrix
 from torch.utils.data import Dataset
 from collections import defaultdict as ddict
-from neuralkg.utils import deserialize, deserialize2
+from neuralkg.utils import deserialize, deserialize_RMPI
 from neuralkg.utils.tools import ssp_multigraph_to_dgl, gen_subgraph_datasets
 
 class KGData(object):
@@ -304,7 +304,7 @@ class GRData(Dataset):
         with self.main_env.begin(db=self.db_pos) as txn:
             str_id = '{:08}'.format(index).encode('ascii')
             if self.args.model_name == 'RMPI':
-                en_nodes_pos, r_label_pos, g_label_pos, en_n_labels_pos, dis_nodes_pos, dis_n_labels_pos = deserialize2(txn.get(str_id)).values()
+                en_nodes_pos, r_label_pos, g_label_pos, en_n_labels_pos, dis_nodes_pos, dis_n_labels_pos = deserialize_RMPI(txn.get(str_id)).values()
                 subgraph_pos = self.prepare_subgraphs(en_nodes_pos, r_label_pos, en_n_labels_pos)
                 dis_subgraph_pos = self.prepare_subgraphs(dis_nodes_pos, r_label_pos, dis_n_labels_pos)
             else:
@@ -318,9 +318,9 @@ class GRData(Dataset):
             for i in range(self.args.num_neg_samples_per_link):
                 str_id = '{:08}'.format(index + i * (self.num_graphs_pos)).encode('ascii')
                 if self.args.model_name == 'RMPI':
-                    en_nodes_neg, r_label_neg, g_label_neg, en_n_labels_neg, dis_nodes_neg, dis_n_labels_neg = deserialize2(txn.get(str_id)).values()
-                    subgraphs_neg.append(self._prepare_subgraphs(en_nodes_neg, r_label_neg, en_n_labels_neg))
-                    dis_subgraphs_neg.append(self._prepare_subgraphs(dis_nodes_neg, r_label_neg, dis_n_labels_neg))
+                    en_nodes_neg, r_label_neg, g_label_neg, en_n_labels_neg, dis_nodes_neg, dis_n_labels_neg = deserialize_RMPI(txn.get(str_id)).values()
+                    subgraphs_neg.append(self.prepare_subgraphs(en_nodes_neg, r_label_neg, en_n_labels_neg))
+                    dis_subgraphs_neg.append(self.prepare_subgraphs(dis_nodes_neg, r_label_neg, dis_n_labels_neg))
                 else:
                     nodes_neg, r_label_neg, g_label_neg, n_labels_neg = deserialize(txn.get(str_id)).values()
                     subgraphs_neg.append(self.prepare_subgraphs(nodes_neg, r_label_neg, n_labels_neg))

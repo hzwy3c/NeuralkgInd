@@ -549,6 +549,7 @@ class Discriminator(nn.Module):
         return logits
 
 class BatchGRU(nn.Module):
+
     def __init__(self, hidden_size=300):
         super(BatchGRU, self).__init__()
         self.hidden_size = hidden_size
@@ -557,7 +558,6 @@ class BatchGRU(nn.Module):
         self.bias = nn.Parameter(torch.Tensor(self.hidden_size))
         self.bias.data.uniform_(-1.0 / math.sqrt(self.hidden_size), 
                                 1.0 / math.sqrt(self.hidden_size))
-
 
     def forward(self, node, a_scope):
         hidden = node
